@@ -20,7 +20,7 @@ from threading import Thread
 import cv2
 import numpy as np
 import torch
-from PIL import Image, ExifTags
+# from PIL import Image, ExifTags
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
@@ -44,9 +44,9 @@ def xywh2xyxy(x):
     return y
 
 # Get orientation exif tag
-for orientation in ExifTags.TAGS.keys():
-    if ExifTags.TAGS[orientation] == 'Orientation':
-        break
+# for orientation in ExifTags.TAGS.keys():
+#     if ExifTags.TAGS[orientation] == 'Orientation':
+#         break
 
 
 def get_hash(files):
@@ -146,24 +146,6 @@ class SimpleDataset(Dataset):
                     shapes[i] = [1, 1 / mini]
 
             self.batch_shapes = np.ceil(np.array(shapes) * img_size / stride + pad).astype(np.int) * stride
-        '''
-
-        '''
-        nm, nf, ne, nd = 0, 0, 0, 0  # number missing, found, empty, duplicate
-        pbar = tqdm(enumerate(self.label_files))
-        for i, file in pbar:
-            anno = self.annos[i]  # label
-            if anno is not None and anno.shape[0]:
-                assert anno.shape[1] == 5, '> 5 label columns: %s' % file
-                assert (anno >= 0).all(), 'negative labels: %s' % file
-                assert (anno[:, 1:] <= 1).all(), 'non-normalized or out of bounds coordinate labels: %s' % file
-                if np.unique(anno, axis=0).shape[0] < anno.shape[0]:  # duplicate rows
-                    nd += 1
-                self.annos[i] = anno
-                nf += 1  # file found
-            else:
-                ne += 1 # file empty
-            pbar.desc = 'Scanning labels %s (%g found, %g missing, %g empty, %g duplicate, for %g images)' % (cache_path, nf, nm, ne, nd, n)
         '''
 
     def __len__(self):
