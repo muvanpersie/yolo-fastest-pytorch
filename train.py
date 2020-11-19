@@ -20,8 +20,7 @@ from torch.cuda import amp
 from models.yolo import YoloFastest
 from dataset.voc_dataset import SimpleDataset
 # from utils.general import (
-#     labels_to_class_weights, check_anchors,
-#     compute_loss, get_latest_run, check_file, set_logging)
+#     labels_to_class_weights, check_anchors)
 
 from loss.detection_loss import compute_loss
 # from utils.torch_utils import init_seeds, ModelEMA
@@ -31,8 +30,12 @@ logger = logging.getLogger(__name__)
 
 
 def train(hyp, opt, device):
-    # logger.info(f'Hyperparameters:\n {hyp}')
 
+    # cudnn benchmark
+    import torch.backends.cudnn as cudnn
+    cudnn.deterministic = False
+    cudnn.benchmark = True
+    
     log_dir = 'output/'
     root_path = '/home/lance/data/DataSets/quanzhou/coco_style/cyclist/images'
     num_cls = 1
@@ -40,23 +43,10 @@ def train(hyp, opt, device):
     imgsz = 640
 
     epochs, batch_size = opt.epochs, opt.batch_size
-
-    # cudnn benchmark
-    import torch.backends.cudnn as cudnn
-    cudnn.deterministic = False
-    cudnn.benchmark = True
-        
-    #------------------------- create model ------------------------------------
-    # model = Model(opt.cfg, ch=3, nc=num_cls).to(device)
-    # ema = ModelEMA(model)  # 指数滑动平均
-
-    model = YoloFastest().to(device)
     
-    #-------------------------create dataloader --------------------------------
-    # 使图像边长变为最大stride的整数倍
-    # max_stride = int(max(model.stride))  # (max stride)
-    # imgsz = math.ceil(opt.img_size[0] / max_stride) * max_stride
-
+    model = YoloFastest().to(device)
+    # ema = ModelEMA(model)  # 指数滑动平均
+    
     dataset = SimpleDataset(root_path, imgsz, batch_size, augment=True, hyp=hyp, stride=32)
     
     dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=8, sampler=None,
@@ -65,7 +55,6 @@ def train(hyp, opt, device):
     batch_per_epoch = len(dataloader)
     num_warm = max(3*batch_per_epoch, 1e3)
 
-    #-------------------------  Optimizer --------------------------------------
     nbs = 64  # nominal batch size
     accumulate = max(round(nbs / batch_size), 1)  # accumulate loss before optimizing
     hyp['weight_decay'] *= batch_size * accumulate / nbs  # scale weight_decay
@@ -99,15 +88,14 @@ def train(hyp, opt, device):
     model.nc = num_cls  # attach number of classes to model
     model.hyp = hyp  # attach hyperparameters to model
     model.gr = 1.0  # giou loss ratio (obj_loss = 1.0 or giou)
-    model.class_weights = labels_to_class_weights(dataset.labels, num_cls).to(device)  # attach class weights
+    model.class_weights = labels_to_class_weights(dataset.labels, num_cls).to(device)
     model.names = names
 
     # Check anchors
-    if not opt.noautoanchor:
-        check_anchors(dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz)
+    # if not opt.noautoanchor:
+    #     check_anchors(dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz)
     
 
-    # ------------------------# Start training #-------------------------------------------
     t0 = time.time()
     
     start_epoch = 0
@@ -119,7 +107,7 @@ def train(hyp, opt, device):
         optimizer.zero_grad()
 
         mloss = torch.zeros(4, device=device)  # mean losses for each epoch
-        for batch_id, (imgs, targets, paths, _) in enumerate(dataloader):
+        for batch_id, (imgs, targets, _, _) in enumerate(dataloader):
             num_iter = batch_id + batch_per_epoch * epoch  # 训练的总迭代次数
             
             imgs = imgs.to(device, non_blocking=True).float() / 255.0
@@ -146,8 +134,8 @@ def train(hyp, opt, device):
                 scaler.step(optimizer)  # optimizer.step
                 scaler.update()
                 optimizer.zero_grad()
-                if ema:
-                    ema.update(model)
+                # if ema:
+                #     ema.update(model)
 
                 mloss = (mloss * batch_id + loss_items) / (batch_id + 1)  # update mean losses
             
@@ -157,8 +145,8 @@ def train(hyp, opt, device):
         lr = [x['lr'] for x in optimizer.param_groups]
         scheduler.step()
 
-        if ema:
-            ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'gr', 'names', 'stride'])
+        # if ema:
+        #     ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'gr', 'names', 'stride'])
         final_epoch = epoch + 1 == epochs
         
         # Save model
@@ -178,7 +166,6 @@ if __name__ == '__main__':
     parser.add_argument('--weights', type=str, default='yolov5s.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
     parser.add_argument('--data', type=str, default='data/coco128.yaml', help='data.yaml path')
-    parser.add_argument('--hyp', type=str, default='', help='hyperparameters path, i.e. data/hyp.scratch.yaml')
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs')
     parser.add_argument('--img-size', nargs='+', type=int, default=[640, 640], help='train,test sizes')
@@ -192,7 +179,17 @@ if __name__ == '__main__':
     parser.add_argument('--logdir', type=str, default='output/', help='logging directory')
     opt = parser.parse_args()
    
+    opt.img_size.extend([opt.img_size[-1]] * (2 - len(opt.img_size)))  # extend to 2 sizes (train, test)
+
+    device = torch.device('cuda:0')
+    
     logging.basicConfig(format="%(message)s", level=logging.INFO)
+    logger.info(opt)
+
+    
+    hyp_path = 'data/hyp.finetune.yaml' if opt.weights else 'data/hyp.scratch.yaml'
+    with open(hyp_path) as f:
+        hyp = yaml.load(f, Loader=yaml.FullLoader)
 
     hyp = {
         "hsv_h": 0.015,  # image HSV-Hue augmentation (fraction)
@@ -207,18 +204,6 @@ if __name__ == '__main__':
         "fliplr": 0.5,  # image flip left-right (probability)
         "mixup": 0.0, # image mixup (probability)
     }
-
-
-    opt.hyp = opt.hyp or ('data/hyp.finetune.yaml' if opt.weights else 'data/hyp.scratch.yaml')
-    # opt.data, opt.cfg, opt.hyp = check_file(opt.data), check_file(opt.cfg), check_file(opt.hyp)  # check files
-    # assert len(opt.cfg) or len(opt.weights), 'either --cfg or --weights must be specified'
-    opt.img_size.extend([opt.img_size[-1]] * (2 - len(opt.img_size)))  # extend to 2 sizes (train, test)
-
-    device = torch.device('cuda:0')
-    logger.info(opt)
-    # 超参
-    with open(opt.hyp) as f:
-        hyp = yaml.load(f, Loader=yaml.FullLoader)
 
     # Train
     train(hyp, opt, device)

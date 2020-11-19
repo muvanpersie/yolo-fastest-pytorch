@@ -14,7 +14,6 @@ import math
 import os
 import random
 import time
-# from pathlib import Path
 from threading import Thread
 
 import cv2
@@ -25,7 +24,6 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 
 def xyxy2xywh(x):
-    # Convert nx4 boxes from [x1, y1, x2, y2] to [x, y, w, h] where xy1=top-left, xy2=bottom-right
     y = torch.zeros_like(x) if isinstance(x, torch.Tensor) else np.zeros_like(x)
     y[:, 0] = (x[:, 0] + x[:, 2]) / 2  # x center
     y[:, 1] = (x[:, 1] + x[:, 3]) / 2  # y center
@@ -35,7 +33,6 @@ def xyxy2xywh(x):
 
 
 def xywh2xyxy(x):
-    # Convert nx4 boxes from [x, y, w, h] to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
     y = torch.zeros_like(x) if isinstance(x, torch.Tensor) else np.zeros_like(x)
     y[:, 0] = x[:, 0] - x[:, 2] / 2
     y[:, 1] = x[:, 1] - x[:, 3] / 2
@@ -43,28 +40,10 @@ def xywh2xyxy(x):
     y[:, 3] = x[:, 1] + x[:, 3] / 2
     return y
 
-# Get orientation exif tag
-# for orientation in ExifTags.TAGS.keys():
-#     if ExifTags.TAGS[orientation] == 'Orientation':
-#         break
-
 
 def get_hash(files):
     return sum(os.path.getsize(f) for f in files if os.path.isfile(f))
 
-
-# def exif_size(img): # Returns exif-corrected PIL size
-#     s = img.size  # (width, height)
-#     try:
-#         rotation = dict(img._getexif().items())[orientation]
-#         if rotation == 6:  # rotation 270
-#             s = (s[1], s[0])
-#         elif rotation == 8:  # rotation 90
-#             s = (s[1], s[0])
-#     except:
-#         pass
-
-#     return s
 
 
 hyp = {
@@ -89,13 +68,14 @@ class SimpleDataset(Dataset):
         self.img_files = sorted(glob.glob(path+"/images/*.jpg"))
         self.label_files = [x.replace('images', 'labels').replace('jpg', 'txt') for x in self.img_files]
 
-        n = len(self.img_files)
+        # n = len(self.img_files)
 
-        bi = np.floor(np.arange(n) / batch_size).astype(np.int)  # batch index
-        nb = bi[-1] + 1  # number of batches
+        # bi = np.floor(np.arange(n) / batch_size).astype(np.int)  # batch index
+        # nb = bi[-1] + 1  # number of batches
 
-        self.n = n  # number of images
-        self.batch = bi  # batch index of image
+        # self.n = n  # number of images
+        # self.batch = bi  # batch index of image
+        
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -154,39 +134,33 @@ class SimpleDataset(Dataset):
     def __getitem__(self, index):
 
         hyp = self.hyp
-        if self.mosaic:
-            # load 4 images at a time into a mosaic
+
+        if self.mosaic: # load 4 images at a time into a mosaic
             img, labels = load_mosaic(self, index)
             shapes = None
 
-            # MixUp
-            if random.random() < hyp['mixup']:
-                img2, labels2 = load_mosaic(self, random.randint(0, len(self.annos) - 1))
-                r = np.random.beta(8.0, 8.0)  # mixup ratio, alpha=beta=8.0
-                img = (img * r + img2 * (1 - r)).astype(np.uint8)
-                labels = np.concatenate((labels, labels2), 0)
-
+        '''
         else:
             img, (h0, w0), (h, w) = load_image(self, index)
 
             # Letterbox
-            shape = self.batch_shapes[self.batch[index]] if self.rect else self.img_size
+            # shape = self.batch_shapes[self.batch[index]] if self.rect else self.img_size
             img, ratio, pad = letterbox(img, shape, auto=False, scaleup=self.augment)
             shapes = (h0, w0), ((h / h0, w / w0), pad)  # for COCO mAP rescaling
 
             labels = []
             x = self.annos[index]
-            if x.size > 0:
-                # Normalized xywh to pixel xyxy format
+            if x.size > 0: # Normalized xywh to pixel xyxy format
                 labels = x.copy()
                 labels[:, 1] = ratio[0] * w * (x[:, 1] - x[:, 3] / 2) + pad[0]  # pad width
                 labels[:, 2] = ratio[1] * h * (x[:, 2] - x[:, 4] / 2) + pad[1]  # pad height
                 labels[:, 3] = ratio[0] * w * (x[:, 1] + x[:, 3] / 2) + pad[0]
                 labels[:, 4] = ratio[1] * h * (x[:, 2] + x[:, 4] / 2) + pad[1]
+        '''
 
         if self.augment:
-            border = self.mosaic_border if self.mosaic else (0, 0)
             # Augment imagespace
+            border = self.mosaic_border if self.mosaic else (0, 0)
             img, labels = random_perspective(img, labels,
                                              degrees=hyp['degrees'],
                                              translate=hyp['translate'],
@@ -194,37 +168,23 @@ class SimpleDataset(Dataset):
                                              shear=hyp['shear'],
                                              perspective=hyp['perspective'],
                                              border=border)
-            '''
-            if not self.mosaic:
-                img, labels = random_perspective(img, labels,
-                                                 degrees=hyp['degrees'],
-                                                 translate=hyp['translate'],
-                                                 scale=hyp['scale'],
-                                                 shear=hyp['shear'],
-                                                 perspective=hyp['perspective'])
-            '''
 
             # colorspace
             augment_hsv(img, hgain=hyp['hsv_h'], sgain=hyp['hsv_s'], vgain=hyp['hsv_v'])
 
+        # print (img.shape)
         # for anno  in labels:
         #     cv2.rectangle(img, (int(anno[1]), int(anno[2])), (int(anno[3]), int(anno[4])), (255, 0, 0), 2)
         # cv2.imshow("test", img)
-        # cv2.waitKey(2000)
-
+        # cv2.waitKey(5000)
 
         nL = len(labels)  # number of labels
         if nL:
-            labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])  # convert xyxy to xywh
+            labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])
             labels[:, [2, 4]] /= img.shape[0]  # normalized height 0-1
             labels[:, [1, 3]] /= img.shape[1]  # normalized width 0-1
 
         if self.augment:
-            if random.random() < hyp['flipud']:
-                img = np.flipud(img)
-                if nL:
-                    labels[:, 2] = 1 - labels[:, 2]
-
             if random.random() < hyp['fliplr']:
                 img = np.fliplr(img)
                 if nL:
@@ -234,7 +194,6 @@ class SimpleDataset(Dataset):
         if nL:
             labels_out[:, 1:] = torch.from_numpy(labels)
 
-        # Convert
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to C*H*W
         img = np.ascontiguousarray(img)
 
@@ -307,7 +266,6 @@ def load_mosaic(self, index):
     yc, xc = [int(random.uniform(-x, 2 * s + x)) for x in self.mosaic_border]  # mosaic center x, y
     indices = [index] + [random.randint(0, len(self.annos) - 1) for _ in range(3)]  # 3 additional image indices
     for i, index in enumerate(indices):
-        # Load image
         img, _, (h, w) = load_image(self, index)
 
         # place img in img4
@@ -343,15 +301,6 @@ def load_mosaic(self, index):
     if len(labels4):
         labels4 = np.concatenate(labels4, 0)
         np.clip(labels4[:, 1:], 0, 2 * s, out=labels4[:, 1:])  # use with random_affine
-
-    # Augment
-    # img4, labels4 = random_perspective(img4, labels4,
-    #                                    degrees=self.hyp['degrees'],
-    #                                    translate=self.hyp['translate'],
-    #                                    scale=self.hyp['scale'],
-    #                                    shear=self.hyp['shear'],
-    #                                    perspective=self.hyp['perspective'],
-    #                                    border=self.mosaic_border)  # border to remove
 
     return img4, labels4
 
