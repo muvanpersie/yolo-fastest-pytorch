@@ -45,41 +45,17 @@ def get_hash(files):
     return sum(os.path.getsize(f) for f in files if os.path.isfile(f))
 
 
-
-hyp = {
-        "fl_gamma": 0.0,  # focal loss gamma (efficientDet default gamma=1.5)
-        "hsv_h": 0.015,  # image HSV-Hue augmentation (fraction)
-        "hsv_s": 0.7,  # image HSV-Saturation augmentation (fraction)
-        "hsv_v": 0.4,  # image HSV-Value augmentation (fraction)
-        "degrees": 0.0,  # image rotation (+/- deg)
-        "translate": 0.1,  # image translation (+/- fraction)
-        "scale": 0.5,  # image scale (+/- gain)
-        "shear": 0.0,  # image shear (+/- deg)
-        "perspective": 0.0,  # image perspective (+/- fraction), range 0-0.001
-        "flipud": 0.0,  # image flip up-down (probability)
-        "fliplr": 0.5,  # image flip left-right (probability)
-        "mixup": 0.0, # image mixup (probability)
-}
-
-
 class SimpleDataset(Dataset):
-    def __init__(self, path, img_size=640, batch_size=16, augment=True, hyp=None, rect=False, stride=32, pad=0.0):
+    def __init__(self, path, img_size=640, augment=True, aug_params=None, rect=False, stride=32, pad=0.0):
 
         self.img_files = sorted(glob.glob(path+"/images/*.jpg"))
         self.label_files = [x.replace('images', 'labels').replace('jpg', 'txt') for x in self.img_files]
-
-        # n = len(self.img_files)
-
-        # bi = np.floor(np.arange(n) / batch_size).astype(np.int)  # batch index
-        # nb = bi[-1] + 1  # number of batches
-
-        # self.n = n  # number of images
-        # self.batch = bi  # batch index of image
-        
+  
         self.img_size = img_size
         self.augment = augment
-        self.hyp = hyp
         self.rect = rect
+
+        self.aug_params = aug_params
 
         self.mosaic = self.augment and not self.rect
         self.mosaic_border = [-img_size // 2, -img_size // 2]
@@ -133,9 +109,7 @@ class SimpleDataset(Dataset):
 
     def __getitem__(self, index):
 
-        hyp = self.hyp
-
-        if self.mosaic: # load 4 images at a time into a mosaic
+        if self.mosaic:
             img, labels = load_mosaic(self, index)
             shapes = None
 
@@ -162,15 +136,16 @@ class SimpleDataset(Dataset):
             # Augment imagespace
             border = self.mosaic_border if self.mosaic else (0, 0)
             img, labels = random_perspective(img, labels,
-                                             degrees=hyp['degrees'],
-                                             translate=hyp['translate'],
-                                             scale=hyp['scale'],
-                                             shear=hyp['shear'],
-                                             perspective=hyp['perspective'],
+                                             degrees=self.aug_params['degrees'],
+                                             translate=self.aug_params['translate'],
+                                             scale=self.aug_params['scale'],
+                                             shear=self.aug_params['shear'],
+                                             perspective=self.aug_params['perspective'],
                                              border=border)
 
             # colorspace
-            augment_hsv(img, hgain=hyp['hsv_h'], sgain=hyp['hsv_s'], vgain=hyp['hsv_v'])
+            augment_hsv(img, hgain=self.aug_params['hsv_h'], sgain=self.aug_params['hsv_s'], 
+                        vgain=self.aug_params['hsv_v'])
 
         # print (img.shape)
         # for anno  in labels:
@@ -185,7 +160,7 @@ class SimpleDataset(Dataset):
             labels[:, [1, 3]] /= img.shape[1]  # normalized width 0-1
 
         if self.augment:
-            if random.random() < hyp['fliplr']:
+            if random.random() < self.aug_params['fliplr']:
                 img = np.fliplr(img)
                 if nL:
                     labels[:, 1] = 1 - labels[:, 1]
@@ -197,7 +172,7 @@ class SimpleDataset(Dataset):
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to C*H*W
         img = np.ascontiguousarray(img)
 
-        return torch.from_numpy(img), labels_out #, self.img_files[index], shapes
+        return torch.from_numpy(img), labels_out
 
     def cache_labels(self, path='labels.cache'):
         x = {}
@@ -229,7 +204,7 @@ class SimpleDataset(Dataset):
         img, label = zip(*batch)  # transposed
         for i, l in enumerate(label):
             l[:, 0] = i
-        return torch.stack(img, 0), torch.cat(label, 0) #, path, shapes
+        return torch.stack(img, 0), torch.cat(label, 0)
 
 
 # loads 1 image from dataset, returns img, original hw, resized hw
@@ -239,7 +214,7 @@ def load_image(self, index):
     assert img is not None, 'Image Not Found ' + path
     h0, w0 = img.shape[:2]  # orig hw
     r = self.img_size / max(h0, w0)  # resize image to img_size
-    # always resize down, only resize up if training with augmentation
+
     if r != 1:
         interp = cv2.INTER_AREA if r < 1 and not self.augment else cv2.INTER_LINEAR
         img = cv2.resize(img, (int(w0 * r), int(h0 * r)), interpolation=interp)
@@ -440,23 +415,23 @@ def box_candidates(box1, box2, wh_thr=2, ar_thr=20, area_thr=0.1):  # box1(4,n),
 if __name__ == "__main__":
     from torch.utils.data import DataLoader, BatchSampler
 
-    hyp = {
-        "fl_gamma": 0.0,  # focal loss gamma (efficientDet default gamma=1.5)
-        "hsv_h": 0.015,  # image HSV-Hue augmentation (fraction)
-        "hsv_s": 0.7,  # image HSV-Saturation augmentation (fraction)
-        "hsv_v": 0.4,  # image HSV-Value augmentation (fraction)
-        "degrees": 0.0,  # image rotation (+/- deg)
-        "translate": 0.1,  # image translation (+/- fraction)
-        "scale": 0.5,  # image scale (+/- gain)
-        "shear": 0.0,  # image shear (+/- deg)
-        "perspective": 0.0,  # image perspective (+/- fraction), range 0-0.001
-        "flipud": 0.0,  # image flip up-down (probability)
-        "fliplr": 0.5,  # image flip left-right (probability)
-        "mixup": 0.0, # image mixup (probability)
-}
-
-    dataset = SimpleDataset("/home/lance/data/DataSets/quanzhou/coco_style/mini", hyp=hyp)
-    dataloader = DataLoader(dataset, batch_size=2, num_workers=1, sampler=None,
+    train_path = '/home/lance/data/DataSets/quanzhou/coco_style/mini'
+    augment_params = {
+            "hsv_h": 0.015,    # image HSV-Hue augmentation (fraction)
+            "hsv_s": 0.7,      # image HSV-Saturation augmentation (fraction)
+            "hsv_v": 0.4,      # image HSV-Value augmentation (fraction)
+            "degrees": 0.0,    # image rotation (+/- deg)
+            "translate": 0.1,  # image translation (+/- fraction)
+            "scale": 0.5,      # image scale (+/- gain)
+            "shear": 0.0,      # image shear (+/- deg)
+            "perspective": 0.0,  # image perspective (+/- fraction), range 0-0.001
+            "flipud": 0.0,     # image flip up-down (probability)
+            "fliplr": 0.5,     # image flip left-right (probability)
+            "mixup": 0.0,      # image mixup (probability)
+            },
+    
+    dataset = SimpleDataset(train_path, img_size=640, aug_params=augment_params)
+    dataloader = DataLoader(dataset, batch_size=1, num_workers=1, sampler=None,
                             pin_memory=True, collate_fn=SimpleDataset.collate_fn)
 
 

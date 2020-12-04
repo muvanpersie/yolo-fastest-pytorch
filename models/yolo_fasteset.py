@@ -70,8 +70,11 @@ class BasicResBlock(nn.Module):
 
 
 class YoloFastest(nn.Module):
-    def __init__(self):
+    def __init__(self, io_params=None):
         super(YoloFastest, self).__init__()
+        self.num_cls = io_params["num_cls"]
+        num_anchor = len(io_params["anchors"][0])
+        self.num_out = num_anchor * (5+self.num_cls)
 
         self.conv1_1 = conv_norm_relu(3, 8, 3)
         self.conv1_2 = conv_norm_relu(8, 8, kernel_size=1, stride=1)
@@ -133,7 +136,7 @@ class YoloFastest(nn.Module):
         self.conv5_5 = conv_norm_relu(128, 128, kernel_size=5, stride=1, groups=128)
         self.conv5_6 = conv_norm(128, 128, kernel_size=1, stride=1)
 
-        self.head_5 = nn.Conv2d(128, 75, kernel_size=1, stride=1)
+        self.head_5 = nn.Conv2d(128, self.num_out, kernel_size=1, stride=1)
 
 
         self.deconv5_1 = deconv_norm_relu(96, 96)
@@ -144,7 +147,7 @@ class YoloFastest(nn.Module):
         self.conv4_1_4 = conv_norm_relu(96, 96, kernel_size=5, stride=1, groups=96)
         self.conv4_1_5 = conv_norm(96, 96, kernel_size=1, stride=1)
 
-        self.head_4 = nn.Conv2d(96, 75, kernel_size=1, stride=1)
+        self.head_4 = nn.Conv2d(96, self.num_out, kernel_size=1, stride=1)
 
 
     def forward(self, x):
@@ -203,7 +206,6 @@ class YoloFastest(nn.Module):
         x = self.conv5_6(x)
         
         head_5 = self.head_5(x)
-        head_5 = head_5.view(8, 3, 25, 40, 40).permute(0, 1, 3, 4, 2).contiguous()
 
         deconv5_1 = self.deconv5_1(conv5_2)
         x = torch.cat((conv4_2, deconv5_1), dim=1)
@@ -215,19 +217,20 @@ class YoloFastest(nn.Module):
         x = self.conv4_1_5(x)
 
         head_4 = self.head_4(x)
-        head_4 = head_4.view(8, 3, 25, 80, 80).permute(0, 1, 3, 4, 2).contiguous()
 
         return head_4, head_5
-
-
-
 
 
 if __name__ == "__main__":
 
     input = torch.randn(1, 3, 320, 320).cuda()
 
-    net = YoloFastest().cuda()
+    io_params =  {
+        "num_cls" : 1,
+        "anchors" :  [[[12, 18],  [37, 49],  [52,132]], 
+                      [[115, 73], [119,199], [242,238]]] }
+
+    net = YoloFastest(io_params).cuda()
     net.eval()
 
     head_4, head_5 = net(input)

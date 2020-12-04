@@ -152,28 +152,36 @@ class BCEBlurWithLogitsLoss(nn.Module):
         return loss.mean()
 
 
-def compute_loss(pred, targets, model):
+def compute_loss(pred, targets, anchors):
+
+    num_anchor = len(anchors[0])
 
     device = targets.device
     lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
    
-    tcls, tbox, indices, anchors = build_targets(pred, targets)  # targets
-
     BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.Tensor([1.0])).to(device)
     BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.Tensor([1.0])).to(device)
 
     cp, cn = smooth_BCE(eps=0.0)
+    
+    tcls, tbox, indices, anchors = build_targets(pred, targets, anchors)
 
     n_scale = len(pred)
     balance = [4.0, 1.0] if n_scale == 2 else [4.0, 1.0, 0.4]
     
     for s, pred_s in enumerate(pred):
+        
+        shape = pred_s.shape
+        num_out  = int(shape[1] / num_anchor)
+        pred_s = pred_s.view(shape[0], num_anchor, num_out, shape[2], shape[3]).permute(0, 1, 3, 4, 2).contiguous()
+
+
         b, a, gj, gi = indices[s]  # img, anchor, gridy, gridx
         tobj = torch.zeros_like(pred_s[..., 0], device=device)  # target obj
 
         n = b.shape[0]  # number of targets
         if n:
-            ps = pred_s[b, a, gj, gi]
+            ps = pred_s[b, a, gj, gi] # N * (num_cls+5)
 
             # Regression (giou loss)
             pxy = ps[:, :2].sigmoid() * 2. - 0.5
@@ -186,11 +194,11 @@ def compute_loss(pred, targets, model):
             gr = 1.0   # giou loss ratio (obj_loss = 1.0 or giou)
             tobj[b, a, gj, gi] = (1.0 - gr) + gr * giou.detach().clamp(0).type(tobj.dtype)
 
-            # # Classification
-            # if num_class > 1:  # cls loss (only if multiple classes)
-            #     t = torch.full_like(ps[:, 5:], cn, device=device)  # targets
-            #     t[range(n), tcls[s]] = cp
-            #     lcls += BCEcls(ps[:, 5:], t)
+            # Classification
+            if num_out - 5 > 1:  # only if multiple classes
+                t = torch.full_like(ps[:, 5:], cn, device=device)  # targets
+                t[range(n), tcls[s]] = cp
+                lcls += BCEcls(ps[:, 5:], t)
 
         lobj += BCEobj(pred_s[..., 4], tobj) * balance[s]  # obj loss
 
@@ -205,14 +213,15 @@ def compute_loss(pred, targets, model):
 
 
 
-def build_targets(pred, targets):
+def build_targets(pred, targets, anchors):
     '''
         pred     --->  [scale_1, scale2 ....]
         targets  --->  N*6 (image,class,x,y,w,h)
+
+        anchors = [[[12, 18],  [37, 49],  [52,132]], 
+               [[115, 73], [119,199], [242,238]]]
     '''
     tcls, tbox, indices, anch = [], [], [], []
-    anchors = [[[12, 18],  [37, 49],  [52,132]], 
-               [[115, 73], [119,199], [242,238]]]
     anchors = torch.Tensor(anchors).cuda()
 
     num_anchor, num_target = len(anchors[0]), targets.shape[0]
