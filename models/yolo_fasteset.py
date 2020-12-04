@@ -203,6 +203,7 @@ class YoloFastest(nn.Module):
         x = self.conv5_6(x)
         
         head_5 = self.head_5(x)
+        head_5 = head_5.view(8, 3, 25, 40, 40).permute(0, 1, 3, 4, 2).contiguous()
 
         deconv5_1 = self.deconv5_1(conv5_2)
         x = torch.cat((conv4_2, deconv5_1), dim=1)
@@ -214,6 +215,7 @@ class YoloFastest(nn.Module):
         x = self.conv4_1_5(x)
 
         head_4 = self.head_4(x)
+        head_4 = head_4.view(8, 3, 25, 80, 80).permute(0, 1, 3, 4, 2).contiguous()
 
         return head_4, head_5
 

@@ -8,7 +8,6 @@ import time
 import logging
 
 import numpy as np
-# import torch.distributed as dist
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
@@ -17,13 +16,12 @@ import yaml
 import torch
 from torch.cuda import amp
 
-from models.yolo import YoloFastest
+from models.yolo_fasteset import YoloFastest
 from dataset.voc_dataset import SimpleDataset
 # from utils.general import (
 #     labels_to_class_weights, check_anchors)
 
 from loss.detection_loss import compute_loss
-# from utils.torch_utils import init_seeds, ModelEMA
 
 logger = logging.getLogger(__name__)
 
@@ -36,19 +34,15 @@ def train(hyp, opt, device):
     cudnn.deterministic = False
     cudnn.benchmark = True
     
-    log_dir = 'output/'
-    root_path = '/home/lance/data/DataSets/quanzhou/coco_style/cyclist/images'
-    num_cls = 1
-    names = ['cyclist']
+    log_dir = 'output'
+    root_path = '/home/lance/data/DataSets/quanzhou/coco_style/mini'
     imgsz = 640
+    epochs = 100
+    batch_size = 32
 
-    epochs, batch_size = opt.epochs, opt.batch_size
-    
     model = YoloFastest().to(device)
-    # ema = ModelEMA(model)  # 指数滑动平均
     
-    dataset = SimpleDataset(root_path, imgsz, batch_size, augment=True, hyp=hyp, stride=32)
-    
+    dataset = SimpleDataset(root_path, imgsz, batch_size, augment=True, hyp=hyp, stride=32) 
     dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=8, sampler=None,
                             pin_memory=True, collate_fn=SimpleDataset.collate_fn)
     
@@ -59,41 +53,32 @@ def train(hyp, opt, device):
     accumulate = max(round(nbs / batch_size), 1)  # accumulate loss before optimizing
     hyp['weight_decay'] *= batch_size * accumulate / nbs  # scale weight_decay
 
-    pg0, pg1, pg2 = [], [], []  # optimizer parameter groups
-    for k, v in model.named_parameters():
-        v.requires_grad = True
-        if '.bias' in k:
-            pg2.append(v)  # biases
-        elif '.weight' in k and '.bn' not in k:
-            pg1.append(v)  # apply weight decay
-        else:
-            pg0.append(v)  # all else
+    # pg0, pg1, pg2 = [], [], []  # optimizer parameter groups
+    # for k, v in model.named_parameters():
+    #     print (k)
+    #     v.requires_grad = True
+    #     if '.bias' in k:
+    #         pg2.append(v)  # biases
+    #     elif '.weight' in k and '.bn' not in k:
+    #         pg1.append(v)  # apply weight decay
+    #     else:
+    #         pg0.append(v)  # all else
 
-    if opt.adam:
-        optimizer = optim.Adam(pg0, lr=hyp['lr0'], betas=(hyp['momentum'], 0.999))  # adjust beta1 to momentum
-    else:
-        optimizer = optim.SGD(pg0, lr=hyp['lr0'], momentum=hyp['momentum'], nesterov=True)
+    # optimizer = optim.Adam(pg0, lr=hyp['lr0'], betas=(hyp['momentum'], 0.999))  # adjust beta1 to momentum
 
-    optimizer.add_param_group({'params': pg1, 'weight_decay': hyp['weight_decay']})  # add pg1 with weight_decay
-    optimizer.add_param_group({'params': pg2})  # add pg2 (biases)
-    logger.info('Optimizer groups: %g .bias, %g conv.weight, %g other' % (len(pg2), len(pg1), len(pg0)))
-    del pg0, pg1, pg2
+    # optimizer.add_param_group({'params': pg1, 'weight_decay': hyp['weight_decay']})  # add pg1 with weight_decay
+    # optimizer.add_param_group({'params': pg2})  # add pg2 (biases)
+    # logger.info('Optimizer groups: %g .bias, %g conv.weight, %g other' % (len(pg2), len(pg1), len(pg0)))
+    
+    # del pg0, pg1, pg2
 
-    lf = lambda x: (((1 + math.cos(x * math.pi / epochs)) / 2) ** 1.0) * 0.8 + 0.2  # cosine
+    optimizer = optim.Adam(model.parameters(), lr=hyp['lr0'], betas=(hyp['momentum'], 0.999))
+    lf = lambda x: (((1 + math.cos(x * math.pi / epochs)) / 2) ** 1.0) * 0.8 + 0.2
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
 
     
-    # Model parameters
-    hyp['cls'] = num_cls  # scale coco-tuned hyp['cls'] to current dataset
-    model.nc = num_cls  # attach number of classes to model
-    model.hyp = hyp  # attach hyperparameters to model
-    model.gr = 1.0  # giou loss ratio (obj_loss = 1.0 or giou)
-    model.class_weights = labels_to_class_weights(dataset.labels, num_cls).to(device)
-    model.names = names
-
     # Check anchors
-    # if not opt.noautoanchor:
-    #     check_anchors(dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz)
+    # check_anchors(dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz)
     
 
     t0 = time.time()
@@ -107,7 +92,7 @@ def train(hyp, opt, device):
         optimizer.zero_grad()
 
         mloss = torch.zeros(4, device=device)  # mean losses for each epoch
-        for batch_id, (imgs, targets, _, _) in enumerate(dataloader):
+        for batch_id, (imgs, targets) in enumerate(dataloader):
             num_iter = batch_id + batch_per_epoch * epoch  # 训练的总迭代次数
             
             imgs = imgs.to(device, non_blocking=True).float() / 255.0
@@ -131,11 +116,9 @@ def train(hyp, opt, device):
 
             # Optimize
             if num_iter % accumulate == 0:
-                scaler.step(optimizer)  # optimizer.step
+                scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
-                # if ema:
-                #     ema.update(model)
 
                 mloss = (mloss * batch_id + loss_items) / (batch_id + 1)  # update mean losses
             
@@ -145,13 +128,11 @@ def train(hyp, opt, device):
         lr = [x['lr'] for x in optimizer.param_groups]
         scheduler.step()
 
-        # if ema:
-        #     ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'gr', 'names', 'stride'])
         final_epoch = epoch + 1 == epochs
         
         # Save model
         ckpt = {'epoch': epoch,
-                'model': ema.ema.module if hasattr(ema, 'module') else ema.ema,
+                'model': model.state_dict(),
                 'optimizer': None if final_epoch else optimizer.state_dict()}
         torch.save(ckpt, log_dir+"/epoch_"+str(epoch)+'.pt')
         del ckpt
@@ -163,12 +144,6 @@ def train(hyp, opt, device):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default='yolov5s.pt', help='initial weights path')
-    parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
-    parser.add_argument('--data', type=str, default='data/coco128.yaml', help='data.yaml path')
-    parser.add_argument('--epochs', type=int, default=300)
-    parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs')
-    parser.add_argument('--img-size', nargs='+', type=int, default=[640, 640], help='train,test sizes')
     parser.add_argument('--rect', action='store_true', help='rectangular training') # 默认为False
     parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
     parser.add_argument('--noautoanchor', action='store_true', help='disable autoanchor check')
@@ -176,22 +151,18 @@ if __name__ == '__main__':
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--multi-scale', action='store_true', help='vary img-size +/- 50%%')
     parser.add_argument('--adam', action='store_true', help='use torch.optim.Adam() optimizer')
-    parser.add_argument('--logdir', type=str, default='output/', help='logging directory')
     opt = parser.parse_args()
    
-    opt.img_size.extend([opt.img_size[-1]] * (2 - len(opt.img_size)))  # extend to 2 sizes (train, test)
-
     device = torch.device('cuda:0')
     
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     logger.info(opt)
 
     
-    hyp_path = 'data/hyp.finetune.yaml' if opt.weights else 'data/hyp.scratch.yaml'
-    with open(hyp_path) as f:
-        hyp = yaml.load(f, Loader=yaml.FullLoader)
-
     hyp = {
+        "lr0": 0.01,  # initial learning rate (SGD=1E-2, Adam=1E-3)
+        "momentum": 0.937,  # SGD momentum/Adam beta1
+        "weight_decay": 0.0005,
         "hsv_h": 0.015,  # image HSV-Hue augmentation (fraction)
         "hsv_s": 0.7,  # image HSV-Saturation augmentation (fraction)
         "hsv_v": 0.4,  # image HSV-Value augmentation (fraction)
