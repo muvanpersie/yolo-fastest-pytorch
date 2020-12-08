@@ -175,7 +175,6 @@ def compute_loss(pred, targets, anchors):
         num_out  = int(shape[1] / num_anchor)
         pred_s = pred_s.view(shape[0], num_anchor, num_out, shape[2], shape[3]).permute(0, 1, 3, 4, 2).contiguous()
 
-
         b, a, gj, gi = indices[s]  # img, anchor, gridy, gridx
         tobj = torch.zeros_like(pred_s[..., 0], device=device)  # target obj
 
@@ -196,15 +195,15 @@ def compute_loss(pred, targets, anchors):
 
             # Classification
             if num_out - 5 > 1:  # only if multiple classes
-                t = torch.full_like(ps[:, 5:], cn, device=device)  # targets
+                t = torch.full_like(ps[:, 5:], cn, device=device)
                 t[range(n), tcls[s]] = cp
                 lcls += BCEcls(ps[:, 5:], t)
 
         lobj += BCEobj(pred_s[..., 4], tobj) * balance[s]  # obj loss
 
     s = 2 / n_scale  # output count scaling
-    lbox *= 0.005 * s
-    lobj *= 1.0 * s * (1.4 if n_scale == 4 else 1.)
+    lbox *= 0.05 * s
+    lobj *= 1.0 * s * (1.4 if n_scale == 3 else 1.)
     lcls *= 0.5 * s
     bs = tobj.shape[0]  # batch size
 

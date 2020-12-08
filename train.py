@@ -14,6 +14,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 from torch.utils.data import DataLoader 
 import torch
 from torch.cuda import amp
+import torch.nn as nn
 
 from models.yolo_fasteset import YoloFastest
 from dataset.voc_dataset import SimpleDataset
@@ -36,10 +37,14 @@ def train(params, device):
     total_epochs = params["train_params"]["total_epochs"]
     batch_size = params["train_params"]["batch_size"]
 
+
     model = YoloFastest(params["io_params"]).to(device)
+    for m in model.modules():
+        if isinstance(m, (nn.Conv2d, nn.Linear)):
+            nn.init.xavier_uniform_(m.weight)
     
-    dataset = SimpleDataset(train_path, input_size, augment=True, 
-                            aug_params=params["augment_params"], stride=32) 
+    dataset = SimpleDataset(train_path, input_size, augment=True,
+                            aug_params=params["augment_params"], rect=False)
     dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=8, sampler=None,
                             pin_memory=True, collate_fn=SimpleDataset.collate_fn)
     
@@ -53,16 +58,12 @@ def train(params, device):
 
     train_params = params["train_params"]
     optimizer = optim.Adam(model.parameters(), lr=train_params['lr0'], betas=(train_params['momentum'], 0.999))
-    lf = lambda x: (((1 + math.cos(x * math.pi / total_epochs)) / 2) ** 1.0) * 0.8 + 0.2
-    scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
 
-    
-    # Check anchors
-    # check_anchors(dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz)
-    
+    lf = lambda x: (((1 + math.cos(x * math.pi / total_epochs)) / 2) ** 1.0) * 0.8 + 0.2
+    scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)    
+
 
     t0 = time.time()
-    
     start_epoch = 0
     scheduler.last_epoch = start_epoch - 1
     scaler = amp.GradScaler(enabled=True)
@@ -140,7 +141,7 @@ if __name__ == '__main__':
     params = {
         "io_params": {
             "save_path" : 'output',
-            "train_path" : '/home/lance/data/DataSets/quanzhou/coco_style/mini',
+            "train_path" : '/home/lance/data/DataSets/quanzhou/coco_style/cyclist',
             "input_size" : 640,
             "num_cls" :  1,
             "anchors" :  [[[12, 18],  [37, 49],  [52,132]], 
@@ -152,8 +153,8 @@ if __name__ == '__main__':
             "hsv_s": 0.7,      # image HSV-Saturation augmentation (fraction)
             "hsv_v": 0.4,      # image HSV-Value augmentation (fraction)
             "degrees": 0.0,    # image rotation (+/- deg)
-            "translate": 0.1,  # image translation (+/- fraction)
-            "scale": 0.5,      # image scale (+/- gain)
+            "translate": 0.0,  # image translation (+/- fraction)
+            "scale": 0.95,      # image scale (+/- gain)
             "shear": 0.0,      # image shear (+/- deg)
             "perspective": 0.0,  # image perspective (+/- fraction), range 0-0.001
             "flipud": 0.0,     # image flip up-down (probability)
@@ -163,7 +164,7 @@ if __name__ == '__main__':
 
         "train_params" : {
             "total_epochs" : 100,
-            "batch_size" : 32,
+            "batch_size" : 8,
             "lr0": 0.01,         # initial learning rate (SGD=1E-2, Adam=1E-3)
             "momentum": 0.937,   # SGD momentum/Adam beta1
             "weight_decay": 0.0005, 

@@ -46,7 +46,7 @@ def get_hash(files):
 
 
 class SimpleDataset(Dataset):
-    def __init__(self, path, img_size=640, augment=True, aug_params=None, rect=False, stride=32, pad=0.0):
+    def __init__(self, path, img_size=640, augment=True, aug_params=None, rect=False, pad=0.0):
 
         self.img_files = sorted(glob.glob(path+"/images/*.jpg"))
         self.label_files = [x.replace('images', 'labels').replace('jpg', 'txt') for x in self.img_files]
@@ -59,9 +59,7 @@ class SimpleDataset(Dataset):
 
         self.mosaic = self.augment and not self.rect
         self.mosaic_border = [-img_size // 2, -img_size // 2]
-        self.stride = stride
         
-        # Check cache
         cache_path = path + '/labels.cache'
         if os.path.isfile(cache_path):
             cache = torch.load(cache_path)
@@ -79,31 +77,6 @@ class SimpleDataset(Dataset):
         self.shapes = np.array(shapes, dtype=np.float64)
         self.annos = list(annos)
 
-        '''
-        if self.rect:
-            # Sort by aspect ratio
-            s = self.shapes
-            ar = s[:, 1] / s[:, 0]  # aspect ratio
-            irect = ar.argsort()
-            self.img_files = [self.img_files[i] for i in irect]
-            self.label_files = [self.label_files[i] for i in irect]
-            self.annos = [self.annos[i] for i in irect]
-            self.shapes = s[irect]  # wh
-            ar = ar[irect]
-
-            # Set training image shapes
-            shapes = [[1, 1]] * nb
-            for i in range(nb):
-                ari = ar[bi == i]
-                mini, maxi = ari.min(), ari.max()
-                if maxi < 1:
-                    shapes[i] = [maxi, 1]
-                elif mini > 1:
-                    shapes[i] = [1, 1 / mini]
-
-            self.batch_shapes = np.ceil(np.array(shapes) * img_size / stride + pad).astype(np.int) * stride
-        '''
-
     def __len__(self):
         return len(self.img_files)
 
@@ -111,26 +84,22 @@ class SimpleDataset(Dataset):
 
         if self.mosaic:
             img, labels = load_mosaic(self, index)
-            shapes = None
 
-        '''
         else:
             img, (h0, w0), (h, w) = load_image(self, index)
 
-            # Letterbox
-            # shape = self.batch_shapes[self.batch[index]] if self.rect else self.img_size
-            img, ratio, pad = letterbox(img, shape, auto=False, scaleup=self.augment)
-            shapes = (h0, w0), ((h / h0, w / w0), pad)  # for COCO mAP rescaling
+            # shape = self.shapes[index] if self.rect else self.img_size # 这里的shape为输出大小
+            shape = (640, 960) if self.rect else self.img_size
+            img, ratio, pad = letterbox(img, shape, auto=True, scaleup=self.augment)
 
             labels = []
             x = self.annos[index]
-            if x.size > 0: # Normalized xywh to pixel xyxy format
+            if x.size > 0: # xywh to pixel xyxy format
                 labels = x.copy()
                 labels[:, 1] = ratio[0] * w * (x[:, 1] - x[:, 3] / 2) + pad[0]  # pad width
                 labels[:, 2] = ratio[1] * h * (x[:, 2] - x[:, 4] / 2) + pad[1]  # pad height
                 labels[:, 3] = ratio[0] * w * (x[:, 1] + x[:, 3] / 2) + pad[0]
                 labels[:, 4] = ratio[1] * h * (x[:, 2] + x[:, 4] / 2) + pad[1]
-        '''
 
         if self.augment:
             # Augment imagespace
@@ -147,7 +116,6 @@ class SimpleDataset(Dataset):
             augment_hsv(img, hgain=self.aug_params['hsv_h'], sgain=self.aug_params['hsv_s'], 
                         vgain=self.aug_params['hsv_v'])
 
-        # print (img.shape)
         # for anno  in labels:
         #     cv2.rectangle(img, (int(anno[1]), int(anno[2])), (int(anno[3]), int(anno[4])), (255, 0, 0), 2)
         # cv2.imshow("test", img)
@@ -162,8 +130,7 @@ class SimpleDataset(Dataset):
         if self.augment:
             if random.random() < self.aug_params['fliplr']:
                 img = np.fliplr(img)
-                if nL:
-                    labels[:, 1] = 1 - labels[:, 1]
+                labels[:, 1] = 1 - labels[:, 1]
 
         labels_out = torch.zeros((nL, 6))
         if nL:
@@ -304,6 +271,8 @@ def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scale
         如果scaleFill为True, 则强制缩放为new_shape的形状
     '''
 
+    pad_w, pad_h, unpad_shape = 0, 0, (0, 0)
+
     shape = img.shape[:2]
     if isinstance(new_shape, int):
         new_shape = (new_shape, new_shape)
@@ -415,22 +384,22 @@ def box_candidates(box1, box2, wh_thr=2, ar_thr=20, area_thr=0.1):  # box1(4,n),
 if __name__ == "__main__":
     from torch.utils.data import DataLoader, BatchSampler
 
-    train_path = '/home/lance/data/DataSets/quanzhou/coco_style/mini'
+    train_path = '/home/lance/data/DataSets/quanzhou/coco_style/cyclist'
     augment_params = {
             "hsv_h": 0.015,    # image HSV-Hue augmentation (fraction)
             "hsv_s": 0.7,      # image HSV-Saturation augmentation (fraction)
             "hsv_v": 0.4,      # image HSV-Value augmentation (fraction)
             "degrees": 0.0,    # image rotation (+/- deg)
             "translate": 0.1,  # image translation (+/- fraction)
-            "scale": 0.5,      # image scale (+/- gain)
+            "scale": 0.1,      # image scale (+/- gain)
             "shear": 0.0,      # image shear (+/- deg)
             "perspective": 0.0,  # image perspective (+/- fraction), range 0-0.001
             "flipud": 0.0,     # image flip up-down (probability)
             "fliplr": 0.5,     # image flip left-right (probability)
             "mixup": 0.0,      # image mixup (probability)
-            },
+            }
     
-    dataset = SimpleDataset(train_path, img_size=640, aug_params=augment_params)
+    dataset = SimpleDataset(train_path, img_size=640, aug_params=augment_params, rect=True)
     dataloader = DataLoader(dataset, batch_size=1, num_workers=1, sampler=None,
                             pin_memory=True, collate_fn=SimpleDataset.collate_fn)
 
