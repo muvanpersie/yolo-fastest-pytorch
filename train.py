@@ -16,7 +16,7 @@ import torch
 from torch.cuda import amp
 import torch.nn as nn
 
-from models.yolo_fasteset import YoloFastest
+from models.yolo_fastest import YoloFastest
 from dataset.voc_dataset import SimpleDataset
 from loss.detection_loss import compute_loss
 
@@ -52,8 +52,8 @@ def train(params, device):
     num_warm = max(3*batch_per_epoch, 1e3)
 
     nbs = 64  # nominal batch size
-    accumulate = max(round(nbs / batch_size), 1)  # accumulate loss before optimizing
-    # hyp['weight_decay'] *= batch_size * accumulate / nbs  # scale weight_decay
+    accumulate = max(round(nbs / batch_size), 1)
+    # hyp['weight_decay'] *= batch_size * accumulate / nbs
 
 
     train_params = params["train_params"]
@@ -105,7 +105,6 @@ def train(params, device):
             
             print("loss: ", loss.item(),  loss_items)
 
-        # Scheduler
         lr = [x['lr'] for x in optimizer.param_groups]
         scheduler.step()
         

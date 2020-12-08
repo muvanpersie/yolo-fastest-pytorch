@@ -10,13 +10,13 @@ import numpy as np
 
 
 from dataset.voc_dataset import letterbox
-from models.yolo_fasteset import YoloFastest
+from models.yolo_fastest import YoloFastest
 from utils.general import non_max_suppression, scale_coords, plot_one_box
 
 
 def detect(save_img=False):
     img_root_path = "/home/lance/data/DataSets/quanzhou/cyclist/ten/JPEGImages"
-    weights = "output/epoch_4.pt" 
+    weights = "output/epoch_0.pt" 
     imgsz = 640
     
     names = ["cyclist"]
@@ -24,16 +24,11 @@ def detect(save_img=False):
 
     device = torch.device('cuda:0')
 
-    # Load model
-    # model = torch.load(weights[0], map_location=device)['model'].float().fuse().eval()
-
-    # names = model.module.names if hasattr(model, 'module') else model.names
-    # colors = [[np.random.randint(0, 255) for _ in range(3)] for _ in range(len(names))]
-
     io_params =  { "num_cls" :  1,
                    "anchors" :  [[[12, 18],  [37, 49],  [52,132]], 
                                  [[115, 73], [119,199], [242,238]]] }
         
+    # inference
     model = YoloFastest(io_params).to(device)
     
     ckpt = torch.load(weights)["model"]
@@ -61,15 +56,14 @@ def detect(save_img=False):
             img = img.unsqueeze(0)
 
         # t1 = time_synchronized()
-        
-
         pred = model(img)
         
         out = []
 
-        scales = [8, 16]
+        scales = [16, 32]
         for i, pred_s in enumerate(pred):
             pred_s = pred_s[0] # 第一个batch
+            print (pred_s.shape)
 
             (_, h, w) = pred_s.shape
             pred_s = pred_s.view(1, 3, 6, h, w).permute(0, 1, 3, 4, 2).contiguous()

@@ -76,7 +76,8 @@ class YoloFastest(nn.Module):
         num_anchor = len(io_params["anchors"][0])
         self.num_out = num_anchor * (5+self.num_cls)
 
-        self.conv1_1 = conv_norm_relu(3, 8, 3)
+        self.conv0 = conv_norm_relu(3, 8, kernel_size=3, stride=2)
+
         self.conv1_2 = conv_norm_relu(8, 8, kernel_size=1, stride=1)
         self.conv1_3 = conv_norm_relu(8, 8, kernel_size=3, stride=1, groups=8) # 可分离卷积
         self.conv1_4 = conv_norm(8, 4, kernel_size=1, stride=1, groups=1)
@@ -151,7 +152,7 @@ class YoloFastest(nn.Module):
 
 
     def forward(self, x):
-        x = self.conv1_1(x)
+        x = self.conv0(x)
         x = self.conv1_2(x)
         x = self.conv1_3(x)
         x = self.conv1_4(x)
