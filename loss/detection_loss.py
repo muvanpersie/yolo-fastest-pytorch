@@ -170,8 +170,13 @@ def compute_loss(pred, targets, anchors):
             # Regression (giou loss)
             pxy = ps[:, :2].sigmoid() * 2. - 0.5
             pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[s]
-            pbox = torch.cat((pxy, pwh), 1).to(device)  # predicted box
+            pbox = torch.cat((pxy, pwh), dim=1).to(device)  # predicted box
             giou = bbox_iou(pbox.T, tbox[s], x1y1x2y2=False, CIoU=True)
+            
+            # if torch.isnan( (1.0 - giou).mean().detach()):
+            #     print ("pred box: \n", pbox)
+            #     print ("target box: \n", tbox[s])
+            
             lbox += (1.0 - giou).mean()
 
             # Objectness
@@ -201,9 +206,6 @@ def build_targets(pred, targets, anchors):
     '''
         pred     --->  [scale_1, scale2 ....]
         targets  --->  N*6 (image,class,x,y,w,h)
-
-        anchors = [[[12, 18],  [37, 49],  [52,132]], 
-               [[115, 73], [119,199], [242,238]]]
     '''
     tcls, tbox, indices, anch = [], [], [], []
     anchors = torch.Tensor(anchors).cuda()
@@ -218,12 +220,12 @@ def build_targets(pred, targets, anchors):
     offset = torch.tensor([[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1]], device=targets.device).float() * g
 
     gain = torch.ones(7, device=targets.device)
-    for s in range(len(pred)): # 16, 32三个scale 
+    for s, stride in enumerate([16, 32]): #range(len(pred)): # 16, 32三个scale 
         
         gain[2:6] = torch.tensor(pred[s].shape)[[3, 2, 3, 2]] # (80,80,80,80)或 40或 20
         t = targets * gain  # 3*N*7
 
-        anchor_s = anchors[s]
+        anchor_s = anchors[s] / stride
 
         if num_target:
             r = t[:, :, 4:6] / anchor_s[:, None]  # wh ratio

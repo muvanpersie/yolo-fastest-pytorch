@@ -15,8 +15,8 @@ from utils.general import non_max_suppression, scale_coords, plot_one_box
 
 
 def detect(save_img=False):
-    img_root_path = "/home/lance/data/DataSets/quanzhou/cyclist/ten/JPEGImages"
-    weights = "output/epoch_0.pt" 
+    img_root_path = '/home/lance/data/DataSets/quanzhou/coco_style/cyclist/images/'
+    weights = "output/epoch_4.pt" 
     imgsz = 640
     
     names = ["cyclist"]
@@ -25,13 +25,13 @@ def detect(save_img=False):
     device = torch.device('cuda:0')
 
     io_params =  { "num_cls" :  1,
-                   "anchors" :  [[[12, 18],  [37, 49],  [52,132]], 
-                                 [[115, 73], [119,199], [242,238]]] }
+                   "anchors" :  [[[30, 61],  [48, 65],  [52,132]], 
+                                 [[52, 114], [114,199], [202,400]]] }
         
     # inference
     model = YoloFastest(io_params).to(device)
     
-    ckpt = torch.load(weights)["model"]
+    ckpt = torch.load(weights)
     model.load_state_dict(ckpt)
 
     # warm up
@@ -44,7 +44,7 @@ def detect(save_img=False):
         
         img0 = cv2.imread(img_path)
         # 长边缩放到new_shape的尺度, 短边按照对应尺度缩放
-        img = letterbox(img0, new_shape=imgsz)[0]
+        img = letterbox(img0, new_shape=(960, 640))[0]
 
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
         img = np.ascontiguousarray(img)
@@ -63,7 +63,6 @@ def detect(save_img=False):
         scales = [16, 32]
         for i, pred_s in enumerate(pred):
             pred_s = pred_s[0] # 第一个batch
-            print (pred_s.shape)
 
             (_, h, w) = pred_s.shape
             pred_s = pred_s.view(1, 3, 6, h, w).permute(0, 1, 3, 4, 2).contiguous()
@@ -77,16 +76,16 @@ def detect(save_img=False):
 
 
             pred_s = pred_s.sigmoid()
-            pred_s[..., 0:2] = (pred_s[..., 0:2] * 2. - 0.5 + grid) * scales[i]
-            
-            pred_s[..., 2:4] = (pred_s[..., 2:4] * 2) ** 2 * anchors
-            
+            pred_s[..., 0:2] = (pred_s[..., 0:2] * 2. - 0.5 + grid) * scales[i] #x,y
+            pred_s[..., 2:4] = (pred_s[..., 2:4] * 2) ** 2 * anchors            #w,h
+            # print (pred_s[..., 2:4])
+
             out.append(pred_s.view(1, -1, 6))
 
         out = torch.cat(out, dim=1)
     
         # # output = [[x1,y1,x2,y2,conf,cls], [....]]   batch_size张图片的检测结果,放在list里面 
-        output = non_max_suppression(out)
+        output = non_max_suppression(out, conf_thres=0.3)
         
         # t2 = time_synchronized()
         # print(" Infer time: {:.3f}".format(t2-t1))

@@ -40,11 +40,17 @@ def train(params, device):
 
     model = YoloFastest(params["io_params"]).to(device)
     for m in model.modules():
-        if isinstance(m, (nn.Conv2d, nn.Linear)):
-            nn.init.xavier_uniform_(m.weight)
+        t = type(m)
+        if t is nn.Conv2d:
+            pass  # nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+        elif t is nn.BatchNorm2d:
+            m.eps = 1e-3
+            m.momentum = 0.03
+        elif t in [nn.LeakyReLU, nn.ReLU, nn.ReLU6]:
+            m.inplace = True
     
     dataset = SimpleDataset(train_path, input_size, augment=True,
-                            aug_params=params["augment_params"], rect=False)
+                            aug_params=params["augment_params"], rect=True)
     dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=8, sampler=None,
                             pin_memory=True, collate_fn=SimpleDataset.collate_fn)
     
@@ -53,7 +59,6 @@ def train(params, device):
 
     nbs = 64  # nominal batch size
     accumulate = max(round(nbs / batch_size), 1)
-    # hyp['weight_decay'] *= batch_size * accumulate / nbs
 
 
     train_params = params["train_params"]
@@ -109,9 +114,10 @@ def train(params, device):
         scheduler.step()
         
         # Save model
-        ckpt = {'epoch': epoch,
-                'model': model.state_dict(),
-                'optimizer': None if epoch+1==total_epochs else optimizer.state_dict()}
+        # ckpt = {'epoch': epoch,
+        #         'model': model.state_dict()},
+        #         'optimizer': None if epoch+1==total_epochs else optimizer.state_dict()}
+        ckpt = model.state_dict()
         torch.save(ckpt, save_path+"/epoch_"+str(epoch)+'.pt')
         del ckpt
 
@@ -121,20 +127,9 @@ def train(params, device):
     
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--rect', action='store_true', help='rectangular training') # 默认为False
-    parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
-    parser.add_argument('--noautoanchor', action='store_true', help='disable autoanchor check')
-    parser.add_argument('--evolve', action='store_true', help='evolve hyperparameters')
-    parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-    parser.add_argument('--multi-scale', action='store_true', help='vary img-size +/- 50%%')
-    parser.add_argument('--adam', action='store_true', help='use torch.optim.Adam() optimizer')
-    opt = parser.parse_args()
-   
+
     device = torch.device('cuda:0')
-    
     logging.basicConfig(format="%(message)s", level=logging.INFO)
-    logger.info(opt)
 
     
     params = {
@@ -143,8 +138,8 @@ if __name__ == '__main__':
             "train_path" : '/home/lance/data/DataSets/quanzhou/coco_style/cyclist',
             "input_size" : 640,
             "num_cls" :  1,
-            "anchors" :  [[[12, 18],  [37, 49],  [52,132]], 
-                          [[115, 73], [119,199], [242,238]]],
+            "anchors" :  [[[30, 61],  [48, 65],  [52,132]], 
+                          [[52, 114], [114,199], [202,400]]],
             },
 
         "augment_params" :{
@@ -153,7 +148,7 @@ if __name__ == '__main__':
             "hsv_v": 0.4,      # image HSV-Value augmentation (fraction)
             "degrees": 0.0,    # image rotation (+/- deg)
             "translate": 0.0,  # image translation (+/- fraction)
-            "scale": 0.95,      # image scale (+/- gain)
+            "scale": 1.0,      # image scale (+/- gain)
             "shear": 0.0,      # image shear (+/- deg)
             "perspective": 0.0,  # image perspective (+/- fraction), range 0-0.001
             "flipud": 0.0,     # image flip up-down (probability)
@@ -162,8 +157,8 @@ if __name__ == '__main__':
             },
 
         "train_params" : {
-            "total_epochs" : 100,
-            "batch_size" : 8,
+            "total_epochs" : 10,
+            "batch_size" : 32,
             "lr0": 0.01,         # initial learning rate (SGD=1E-2, Adam=1E-3)
             "momentum": 0.937,   # SGD momentum/Adam beta1
             "weight_decay": 0.0005, 

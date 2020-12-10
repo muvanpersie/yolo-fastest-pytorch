@@ -86,31 +86,34 @@ class SimpleDataset(Dataset):
             img, labels = load_mosaic(self, index)
 
         else:
-            img, (h0, w0), (h, w) = load_image(self, index)
 
-            # shape = self.shapes[index] if self.rect else self.img_size # 这里的shape为输出大小
-            shape = (640, 960) if self.rect else self.img_size
-            img, ratio, pad = letterbox(img, shape, auto=True, scaleup=self.augment)
-
+            path = self.img_files[index]
+            img = cv2.imread(path)  # BGR
+            assert img is not None, 'Image Not Found ' + path
+            h, w, _ = img.shape
+            
+            shape = (960, 640) if self.rect else self.img_size
+            img, ratio, pad = letterbox(img, shape)
+    
             labels = []
             x = self.annos[index]
-            if x.size > 0: # xywh to pixel xyxy format
+            if x.size > 0:
                 labels = x.copy()
                 labels[:, 1] = ratio[0] * w * (x[:, 1] - x[:, 3] / 2) + pad[0]  # pad width
                 labels[:, 2] = ratio[1] * h * (x[:, 2] - x[:, 4] / 2) + pad[1]  # pad height
                 labels[:, 3] = ratio[0] * w * (x[:, 1] + x[:, 3] / 2) + pad[0]
                 labels[:, 4] = ratio[1] * h * (x[:, 2] + x[:, 4] / 2) + pad[1]
 
+        
         if self.augment:
-            # Augment imagespace
             border = self.mosaic_border if self.mosaic else (0, 0)
-            img, labels = random_perspective(img, labels,
-                                             degrees=self.aug_params['degrees'],
-                                             translate=self.aug_params['translate'],
-                                             scale=self.aug_params['scale'],
-                                             shear=self.aug_params['shear'],
-                                             perspective=self.aug_params['perspective'],
-                                             border=border)
+            # img, labels = random_perspective(img, labels,
+            #                                  degrees=self.aug_params['degrees'],
+            #                                  translate=self.aug_params['translate'],
+            #                                  scale=self.aug_params['scale'],
+            #                                  shear=self.aug_params['shear'],
+            #                                  perspective=self.aug_params['perspective'],
+            #                                  border=border)
 
             # colorspace
             augment_hsv(img, hgain=self.aug_params['hsv_h'], sgain=self.aug_params['hsv_s'], 
@@ -264,43 +267,40 @@ def replicate(img, labels):
     return img, labels
 
 
-def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True):
+def letterbox(img, new_shape=(960, 640), color=(114, 114, 114),  scaleup=True):
     '''
-    缩放img到new_shape;
-        如果auto为True, 则原始图片按照比例缩放,长边为640, 短边按照对应比例缩放,然后pad为64的倍数,
-        如果scaleFill为True, 则强制缩放为new_shape的形状
     '''
-
-    pad_w, pad_h, unpad_shape = 0, 0, (0, 0)
 
     shape = img.shape[:2]
     if isinstance(new_shape, int):
         new_shape = (new_shape, new_shape)
 
-    if auto:
-        r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
-        if not scaleup:   # do not scale up 
-            r = min(r, 1.0)
+    r_w = new_shape[0] / shape[1]
+    r_h = new_shape[1] / shape[0]
+    # if not scaleup:
+    #     r = min(r, 1.0)
 
-        ratio = r, r
-        unpad_shape = int(round(shape[1] * r)), int(round(shape[0] * r))
-        pad_w, pad_h = new_shape[1] - unpad_shape[0], new_shape[0] - unpad_shape[1]
-        pad_w, pad_h = np.mod(pad_w, 64), np.mod(pad_h, 64)
+    img = cv2.resize(img, new_shape, interpolation=cv2.INTER_AREA)
+    pad_w = 0
+    pad_h = 0
 
-    elif scaleFill:  # stretch
-        pad_w, pad_h = 0.0, 0.0
-        unpad_shape = (new_shape[1], new_shape[0])
-        ratio = new_shape[1] / shape[1], new_shape[0] / shape[0]  # width, height ratios
+    
+    # unpad_shape = int(round(shape[1] * r)), int(round(shape[0] * r))
+    # pad_w, pad_h = new_shape[1] - unpad_shape[0], new_shape[0] - unpad_shape[1]
+    # pad_w, pad_h = np.mod(pad_w, 64), np.mod(pad_h, 64)
 
-    pad_w /= 2
-    pad_h /= 2
 
-    if shape[::-1] != unpad_shape:  # resize
-        img = cv2.resize(img, unpad_shape, interpolation=cv2.INTER_LINEAR)
-    top, bottom = int(round(pad_h - 0.1)), int(round(pad_h + 0.1))
-    left, right = int(round(pad_w - 0.1)), int(round(pad_w + 0.1))
-    img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
-    return img, ratio, (pad_w, pad_h)
+    # pad_w /= 2
+    # pad_h /= 2
+
+    # if shape[::-1] != unpad_shape:  # resize
+    #     img = cv2.resize(img, unpad_shape, interpolation=cv2.INTER_LINEAR)
+    # top, bottom = int(round(pad_h - 0.1)), int(round(pad_h + 0.1))
+    # left, right = int(round(pad_w - 0.1)), int(round(pad_w + 0.1))
+
+    # img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
+
+    return img, (r_w, r_h), (pad_w, pad_h)
 
 
 def random_perspective(img, targets=(), degrees=10, translate=.1, scale=.1, shear=10, perspective=0.0, border=(0, 0)):
