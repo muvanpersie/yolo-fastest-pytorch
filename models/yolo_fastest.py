@@ -221,6 +221,17 @@ class YoloFastest(nn.Module):
 
         return head_4, head_5
 
+    def initialize_weights(self):
+        for m in self.modules():
+            t = type(m)
+            if t is nn.Conv2d:
+                pass
+            elif t is nn.BatchNorm2d:
+                m.eps = 1e-3
+                m.momentum = 0.03
+            elif t in [nn.LeakyReLU, nn.ReLU, nn.ReLU6]:
+                m.inplace = True
+
 
 if __name__ == "__main__":
 

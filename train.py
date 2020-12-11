@@ -37,16 +37,7 @@ def train(params, device):
     batch_size = params["train_params"]["batch_size"]
 
     model = YoloFastest(params["io_params"]).to(device)
-    for m in model.modules():
-        t = type(m)
-        if t is nn.Conv2d:
-            # nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            pass
-        elif t is nn.BatchNorm2d:
-            m.eps = 1e-3
-            m.momentum = 0.03
-        elif t in [nn.LeakyReLU, nn.ReLU, nn.ReLU6]:
-            m.inplace = True
+    model.initialize_weights()
 
     dataset = SimpleDataset(train_path, input_size, augment=True,
                             aug_params=params["augment_params"], rect=True)
@@ -83,8 +74,7 @@ def train(params, device):
             # Warm Up
             if iteration <= num_warm:
                 xi = [0, num_warm]
-                accumulate = max(1, np.interp(
-                    iteration, xi, [1, nbs / batch_size]).round())
+                accumulate = max(1, np.interp(iteration, xi, [1, nbs / batch_size]).round())
                 for j, x in enumerate(optimizer.param_groups):
                     x['lr'] = np.interp(
                         iteration, xi, [0.1 if j == 2 else 0.0, x['initial_lr'] * lf(epoch)])
@@ -146,7 +136,7 @@ if __name__ == '__main__':
         "train_params": {
             "total_epochs": 10,
             "batch_size": 32,
-            "lr0": 0.01,         # initial learning rate (SGD=1E-2, Adam=1E-3)
+            "lr0": 0.001,         # initial learning rate (SGD=1E-2, Adam=1E-3)
             "momentum": 0.937,   # SGD momentum/Adam beta1
             "weight_decay": 0.0005,
         },

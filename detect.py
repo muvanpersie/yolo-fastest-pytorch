@@ -16,7 +16,7 @@ from utils.general import non_max_suppression, scale_coords, plot_one_box
 
 def detect(save_img=False):
     img_root_path = '/home/lance/data/DataSets/quanzhou/coco_style/cyclist/images/'
-    weights = "output/epoch_4.pt" 
+    weights = "output/epoch_6.pt" 
     imgsz = 640
     
     names = ["cyclist"]
@@ -43,10 +43,8 @@ def detect(save_img=False):
     for img_path in img_lists:
         
         img0 = cv2.imread(img_path)
-        # 长边缩放到new_shape的尺度, 短边按照对应尺度缩放
         img = letterbox(img0, new_shape=(960, 640))[0]
-
-        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
         img = np.ascontiguousarray(img)
 
         img = torch.from_numpy(img).to(device).float()
@@ -59,7 +57,6 @@ def detect(save_img=False):
         pred = model(img)
         
         out = []
-
         scales = [16, 32]
         for i, pred_s in enumerate(pred):
             pred_s = pred_s[0] # 第一个batch

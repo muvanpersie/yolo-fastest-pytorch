@@ -172,11 +172,7 @@ def compute_loss(pred, targets, anchors):
             pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[s]
             pbox = torch.cat((pxy, pwh), dim=1).to(device)  # predicted box
             giou = bbox_iou(pbox.T, tbox[s], x1y1x2y2=False, CIoU=True)
-            
-            # if torch.isnan( (1.0 - giou).mean().detach()):
-            #     print ("pred box: \n", pbox)
-            #     print ("target box: \n", tbox[s])
-            
+                        
             lbox += (1.0 - giou).mean()
 
             # Objectness
@@ -189,16 +185,16 @@ def compute_loss(pred, targets, anchors):
                 t[range(n), tcls[s]] = cp
                 lcls += BCEcls(ps[:, 5:], t)
 
+        print (tobj.max())
         lobj += BCEobj(pred_s[..., 4], tobj) * balance[s]  # obj loss
 
-    s = 2 / n_scale  # output count scaling
-    lbox *= 0.05 * s
-    lobj *= 1.0 * s * (1.4 if n_scale == 3 else 1.)
-    lcls *= 0.5 * s
+    lbox *= 0.05
+    lobj *= 1.0 * (1.4 if n_scale == 3 else 1.)
+    lcls *= 0.5
     bs = tobj.shape[0]  # batch size
 
     loss = lbox + lobj + lcls
-    return loss * bs, torch.cat((lbox, lobj, lcls, loss)).detach()
+    return loss * bs, torch.cat((lbox, lobj, lcls)).detach()
 
 
 
