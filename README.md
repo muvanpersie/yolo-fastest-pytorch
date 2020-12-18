@@ -1,6 +1,6 @@
 ## Pytorch version yolo-fastest
 
-This repo is base on [Yolo-Fastest](https://github.com/dog-qiuqiu/Yolo-Fastest) and [yolov5](https://github.com/ultralytics/yolov5). It is not finished now. 
+This repo is base on [Yolo-Fastest](https://github.com/dog-qiuqiu/Yolo-Fastest) and [yolov5](https://github.com/ultralytics/yolov5). It can do one class detection task now, and it will be updated! 
 
 ### 1. Requirements
 - Ubunut 16+
@@ -9,7 +9,7 @@ This repo is base on [Yolo-Fastest](https://github.com/dog-qiuqiu/Yolo-Fastest) 
 - opencv-python==4.2.0.34
 
 ### 2. Train
-Dataset label is in MSCOCO style, (clss x_c, y_c, w, h).
+Dataset label is in MSCOCO style, (class, x_c, y_c, w, h).
 ```
     --DATA_ROOT
         |
