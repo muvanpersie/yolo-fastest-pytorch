@@ -1,25 +1,14 @@
 # -*-coding=utf-8 -*-
-'''
-import numpy as np 
-import cv2
-import glob
-import json
-import torch
-
-from torch.utils.data import Dataset
-'''
 
 import glob
 import math
 import os
 import random
 import time
-from threading import Thread
 
 import cv2
 import numpy as np
 import torch
-# from PIL import Image, ExifTags
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
@@ -60,6 +49,8 @@ class SimpleDataset(Dataset):
         self.mosaic = self.augment and not self.rect
         self.mosaic_border = [-img_size // 2, -img_size // 2]
         
+        
+        #cache为字典 cache[img_path] = [annos, shape]
         cache_path = path + '/labels.cache'
         if os.path.isfile(cache_path):
             cache = torch.load(cache_path)
@@ -67,15 +58,10 @@ class SimpleDataset(Dataset):
                 cache = self.cache_labels(cache_path)
         else:
             cache = self.cache_labels(cache_path)
-        '''
-        cache: dict
-             cache[img_path] = [annos, shape]
-        '''
 
-        # Get labels
         annos, shapes = zip(*[cache[x] for x in self.img_files])
-        self.shapes = np.array(shapes, dtype=np.float64)
         self.annos = list(annos)
+        # self.shapes = np.array(shapes, dtype=np.float64) #图片的原始尺寸
 
     def __len__(self):
         return len(self.img_files)
@@ -84,29 +70,26 @@ class SimpleDataset(Dataset):
 
         if self.mosaic:
             img, labels = load_mosaic(self, index)
-
         else:
+            img, labels= load_rect(self, index, new_shape=(640, 960))
 
-            path = self.img_files[index]
-            img = cv2.imread(path)  # BGR
-            assert img is not None, 'Image Not Found ' + path
-            h, w, _ = img.shape
-            
-            shape = (960, 640) if self.rect else self.img_size
-            img, ratio, pad = letterbox(img, shape)
-    
-            labels = []
-            x = self.annos[index]
-            if x.size > 0:
-                labels = x.copy()
-                labels[:, 1] = ratio[0] * w * (x[:, 1] - x[:, 3] / 2) + pad[0]  # pad width
-                labels[:, 2] = ratio[1] * h * (x[:, 2] - x[:, 4] / 2) + pad[1]  # pad height
-                labels[:, 3] = ratio[0] * w * (x[:, 1] + x[:, 3] / 2) + pad[0]
-                labels[:, 4] = ratio[1] * h * (x[:, 2] + x[:, 4] / 2) + pad[1]
+        # for anno in labels:
+        #     x1 = int(anno[1])
+        #     x2 = int(anno[3])
+        #     y1 = int(anno[2])
+        #     y2 = int(anno[4])
 
+        #     cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 2)
+        # cv2.imshow("test", img)
+        # cv2.waitKey(0)
+
+        if len(labels):
+                labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])
+                labels[:, [2, 4]] /= img.shape[0]
+                labels[:, [1, 3]] /= img.shape[1]
         
         if self.augment:
-            border = self.mosaic_border if self.mosaic else (0, 0)
+            # border = self.mosaic_border if self.mosaic else (0, 0)
             # img, labels = random_perspective(img, labels,
             #                                  degrees=self.aug_params['degrees'],
             #                                  translate=self.aug_params['translate'],
@@ -119,27 +102,16 @@ class SimpleDataset(Dataset):
             augment_hsv(img, hgain=self.aug_params['hsv_h'], sgain=self.aug_params['hsv_s'], 
                         vgain=self.aug_params['hsv_v'])
 
-        # for anno  in labels:
-        #     cv2.rectangle(img, (int(anno[1]), int(anno[2])), (int(anno[3]), int(anno[4])), (255, 0, 0), 2)
-        # cv2.imshow("test", img)
-        # cv2.waitKey(5000)
-
-        nL = len(labels)  # number of labels
-        if nL:
-            labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])
-            labels[:, [2, 4]] /= img.shape[0]  # normalized height 0-1
-            labels[:, [1, 3]] /= img.shape[1]  # normalized width 0-1
-
-        if self.augment:
             if random.random() < self.aug_params['fliplr']:
                 img = np.fliplr(img)
                 labels[:, 1] = 1 - labels[:, 1]
 
+        nL = len(labels)  # number of labels
         labels_out = torch.zeros((nL, 6))
         if nL:
             labels_out[:, 1:] = torch.from_numpy(labels)
 
-        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to C*H*W
+        img = img[:, :, ::-1].transpose(2, 0, 1)
         img = np.ascontiguousarray(img)
 
         return torch.from_numpy(img), labels_out
@@ -177,6 +149,34 @@ class SimpleDataset(Dataset):
         return torch.stack(img, 0), torch.cat(label, 0)
 
 
+# 保持原图的宽高比进行缩放, 两边填充
+def load_rect(self, index, new_shape=(640, 960), color=(114, 114, 114)):
+
+    img_path = self.img_files[index]
+    img = cv2.imread(img_path)
+    labels = self.annos[index] # xywh 0-1之间
+
+    shape = img.shape[:2]
+    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
+
+    unpad_shape = int(round(shape[1] * r)), int(round(shape[0] * r))
+    dw, dh = new_shape[1] - unpad_shape[0], new_shape[0] - unpad_shape[1]  # wh padding
+    
+    img = cv2.resize(img, unpad_shape, interpolation=cv2.INTER_LINEAR)
+    
+    dw, dh = dw/2, dh/2
+    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+    img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
+
+    if len(labels):
+        labels[:, 1:5] = xywh2xyxy(labels[:, 1:5])
+        labels[:, [2, 4]] = (labels[:, [2, 4]] * shape[0]) * r + top
+        labels[:, [1, 3]] = (labels[:, [1, 3]] * shape[1]) * r + left
+
+    return img, labels
+
+
 # loads 1 image from dataset, returns img, original hw, resized hw
 def load_image(self, index): 
     path = self.img_files[index]
@@ -189,21 +189,6 @@ def load_image(self, index):
         interp = cv2.INTER_AREA if r < 1 and not self.augment else cv2.INTER_LINEAR
         img = cv2.resize(img, (int(w0 * r), int(h0 * r)), interpolation=interp)
     return img, (h0, w0), img.shape[:2]  # img, hw_original, hw_resized
-
-
-def augment_hsv(img, hgain=0.5, sgain=0.5, vgain=0.5):
-    r = np.random.uniform(-1, 1, 3) * [hgain, sgain, vgain] + 1  # random gains
-    hue, sat, val = cv2.split(cv2.cvtColor(img, cv2.COLOR_BGR2HSV))
-    dtype = img.dtype  # uint8
-
-    x = np.arange(0, 256, dtype=np.int16)
-    lut_hue = ((x * r[0]) % 180).astype(dtype)
-    lut_sat = np.clip(x * r[1], 0, 255).astype(dtype)
-    lut_val = np.clip(x * r[2], 0, 255).astype(dtype)
-
-    img_hsv = cv2.merge((cv2.LUT(hue, lut_hue), cv2.LUT(sat, lut_sat), cv2.LUT(val, lut_val))).astype(dtype)
-    cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR, dst=img)  # no return needed
-
 
 def load_mosaic(self, index):
     labels4 = []
@@ -250,57 +235,18 @@ def load_mosaic(self, index):
     return img4, labels4
 
 
-def replicate(img, labels):
-    # Replicate labels
-    h, w = img.shape[:2]
-    boxes = labels[:, 1:].astype(int)
-    x1, y1, x2, y2 = boxes.T
-    s = ((x2 - x1) + (y2 - y1)) / 2  # side length (pixels)
-    for i in s.argsort()[:round(s.size * 0.5)]:  # smallest indices
-        x1b, y1b, x2b, y2b = boxes[i]
-        bh, bw = y2b - y1b, x2b - x1b
-        yc, xc = int(random.uniform(0, h - bh)), int(random.uniform(0, w - bw))  # offset x, y
-        x1a, y1a, x2a, y2a = [xc, yc, xc + bw, yc + bh]
-        img[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
-        labels = np.append(labels, [[labels[i, 0], x1a, y1a, x2a, y2a]], axis=0)
+def augment_hsv(img, hgain=0.5, sgain=0.5, vgain=0.5):
+    r = np.random.uniform(-1, 1, 3) * [hgain, sgain, vgain] + 1  # random gains
+    hue, sat, val = cv2.split(cv2.cvtColor(img, cv2.COLOR_BGR2HSV))
+    dtype = img.dtype  # uint8
 
-    return img, labels
+    x = np.arange(0, 256, dtype=np.int16)
+    lut_hue = ((x * r[0]) % 180).astype(dtype)
+    lut_sat = np.clip(x * r[1], 0, 255).astype(dtype)
+    lut_val = np.clip(x * r[2], 0, 255).astype(dtype)
 
-
-def letterbox(img, new_shape=(960, 640), color=(114, 114, 114),  scaleup=True):
-    '''
-    '''
-
-    shape = img.shape[:2]
-    if isinstance(new_shape, int):
-        new_shape = (new_shape, new_shape)
-
-    r_w = new_shape[0] / shape[1]
-    r_h = new_shape[1] / shape[0]
-    # if not scaleup:
-    #     r = min(r, 1.0)
-
-    img = cv2.resize(img, new_shape, interpolation=cv2.INTER_AREA)
-    pad_w = 0
-    pad_h = 0
-
-    
-    # unpad_shape = int(round(shape[1] * r)), int(round(shape[0] * r))
-    # pad_w, pad_h = new_shape[1] - unpad_shape[0], new_shape[0] - unpad_shape[1]
-    # pad_w, pad_h = np.mod(pad_w, 64), np.mod(pad_h, 64)
-
-
-    # pad_w /= 2
-    # pad_h /= 2
-
-    # if shape[::-1] != unpad_shape:  # resize
-    #     img = cv2.resize(img, unpad_shape, interpolation=cv2.INTER_LINEAR)
-    # top, bottom = int(round(pad_h - 0.1)), int(round(pad_h + 0.1))
-    # left, right = int(round(pad_w - 0.1)), int(round(pad_w + 0.1))
-
-    # img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
-
-    return img, (r_w, r_h), (pad_w, pad_h)
+    img_hsv = cv2.merge((cv2.LUT(hue, lut_hue), cv2.LUT(sat, lut_sat), cv2.LUT(val, lut_val))).astype(dtype)
+    cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR, dst=img)  # no return needed
 
 
 def random_perspective(img, targets=(), degrees=10, translate=.1, scale=.1, shear=10, perspective=0.0, border=(0, 0)):

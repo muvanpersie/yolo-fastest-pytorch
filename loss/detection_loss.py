@@ -171,13 +171,13 @@ def compute_loss(pred, targets, anchors):
             pxy = ps[:, :2].sigmoid() * 2. - 0.5
             pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[s]
             pbox = torch.cat((pxy, pwh), dim=1).to(device)  # predicted box
-            giou = bbox_iou(pbox.T, tbox[s], x1y1x2y2=False, CIoU=True)
+            iou = bbox_iou(pbox.T, tbox[s], x1y1x2y2=False, CIoU=True)
                         
-            lbox += (1.0 - giou).mean()
+            lbox += (1.0 - iou).mean()
 
             # Objectness
-            gr = 1.0   # giou loss ratio (obj_loss = 1.0 or giou)
-            tobj[b, a, gj, gi] = (1.0 - gr) + gr * giou.detach().clamp(0).type(tobj.dtype)
+            iou_ratio = 0.5
+            tobj[b, a, gj, gi] = (1.0 - iou_ratio) + iou_ratio * iou.detach().clamp(0).type(tobj.dtype)
 
             # Classification
             if num_out - 5 > 1:  # only if multiple classes
@@ -185,7 +185,6 @@ def compute_loss(pred, targets, anchors):
                 t[range(n), tcls[s]] = cp
                 lcls += BCEcls(ps[:, 5:], t)
 
-        print (tobj.max())
         lobj += BCEobj(pred_s[..., 4], tobj) * balance[s]  # obj loss
 
     lbox *= 0.05
@@ -216,7 +215,7 @@ def build_targets(pred, targets, anchors):
     offset = torch.tensor([[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1]], device=targets.device).float() * g
 
     gain = torch.ones(7, device=targets.device)
-    for s, stride in enumerate([16, 32]): #range(len(pred)): # 16, 32三个scale 
+    for s, stride in enumerate([16, 32]): #range(len(pred)): # 16, 32两个scale 
         
         gain[2:6] = torch.tensor(pred[s].shape)[[3, 2, 3, 2]] # (80,80,80,80)或 40或 20
         t = targets * gain  # 3*N*7

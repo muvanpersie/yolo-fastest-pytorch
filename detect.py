@@ -8,8 +8,6 @@ import cv2
 import torch
 import numpy as np
 
-
-from dataset.voc_dataset import letterbox
 from models.yolo_fastest import YoloFastest
 from utils.general import non_max_suppression, scale_coords, plot_one_box
 
@@ -39,11 +37,12 @@ def detect(save_img=False):
     _ = model(img)
     
     t0 = time.time()
-    img_lists = sorted(glob.glob(img_root_path + '/*.jpg'))
+    img_lists = sorted(glob.glob(img_root_path + '*.jpg'))
     for img_path in img_lists:
         
         img0 = cv2.imread(img_path)
-        img = letterbox(img0, new_shape=(960, 640))[0]
+        # img = letterbox(img0, new_shape=(960, 640))[0]
+        img = cv2.resize(img0, (960,640), interpolation=cv2.INTER_LINEAR)
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
         img = np.ascontiguousarray(img)
 
@@ -75,7 +74,6 @@ def detect(save_img=False):
             pred_s = pred_s.sigmoid()
             pred_s[..., 0:2] = (pred_s[..., 0:2] * 2. - 0.5 + grid) * scales[i] #x,y
             pred_s[..., 2:4] = (pred_s[..., 2:4] * 2) ** 2 * anchors            #w,h
-            # print (pred_s[..., 2:4])
 
             out.append(pred_s.view(1, -1, 6))
 
