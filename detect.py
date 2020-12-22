@@ -24,7 +24,8 @@ def detect(save_img=False):
 
     io_params =  { "num_cls" :  1,
                    "anchors" :  [[[30, 61],  [48, 65],  [52,132]], 
-                                 [[52, 114], [114,199], [202,400]]] }
+                                 [[52, 114], [114,199], [202,400]]],
+                   "strides" :  [16, 32] }
         
     # inference
     model = YoloFastest(io_params).to(device)
@@ -56,7 +57,7 @@ def detect(save_img=False):
         pred = model(img)
         
         out = []
-        scales = [16, 32]
+        strides = io_params["strides"]
         for i, pred_s in enumerate(pred):
             pred_s = pred_s[0] # 第一个batch
 
@@ -72,8 +73,8 @@ def detect(save_img=False):
 
 
             pred_s = pred_s.sigmoid()
-            pred_s[..., 0:2] = (pred_s[..., 0:2] * 2. - 0.5 + grid) * scales[i] #x,y
-            pred_s[..., 2:4] = (pred_s[..., 2:4] * 2) ** 2 * anchors            #w,h
+            pred_s[..., 0:2] = (pred_s[..., 0:2] * 2. - 0.5 + grid) * strides[i] #x,y
+            pred_s[..., 2:4] = (pred_s[..., 2:4] * 2) ** 2 * anchors             #w,h
 
             out.append(pred_s.view(1, -1, 6))
 

@@ -250,10 +250,7 @@ def augment_hsv(img, hgain=0.5, sgain=0.5, vgain=0.5):
 
 
 def random_perspective(img, targets=(), degrees=10, translate=.1, scale=.1, shear=10, perspective=0.0, border=(0, 0)):
-    # torchvision.transforms.RandomAffine(degrees=(-10, 10), translate=(.1, .1), scale=(.9, 1.1), shear=(-10, 10))
-    # targets = [cls, xyxy]
-
-    height = img.shape[0] + border[0] * 2  # shape(h,w,c)
+    height = img.shape[0] + border[0] * 2
     width = img.shape[1] + border[1] * 2
 
     # Center

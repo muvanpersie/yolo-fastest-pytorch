@@ -7,13 +7,13 @@ import time
 import logging
 
 import numpy as np
-import torch.nn.functional as F
+import torch
+import torch.nn as nn
+from torch.cuda import amp
 import torch.optim as optim
+import torch.nn.functional as F
 import torch.optim.lr_scheduler as lr_scheduler
 from torch.utils.data import DataLoader
-import torch
-from torch.cuda import amp
-import torch.nn as nn
 
 from models.yolo_fastest import YoloFastest
 from dataset.voc_dataset import SimpleDataset
@@ -23,11 +23,6 @@ logger = logging.getLogger(__name__)
 
 
 def train(params, device):
-
-    # cudnn benchmark
-    import torch.backends.cudnn as cudnn
-    cudnn.deterministic = False
-    cudnn.benchmark = True
 
     save_path = params["io_params"]["save_path"]
     train_path = params["io_params"]["train_path"]
@@ -53,12 +48,15 @@ def train(params, device):
     optimizer = optim.Adam(model.parameters(), lr=train_params['lr0'], betas=(
         train_params['momentum'], 0.999))
 
-    def lf(x): return (
-        ((1 + math.cos(x * math.pi / total_epochs)) / 2) ** 1.0) * 0.8 + 0.2
+    def lf(epoch): 
+        return ((1+math.cos(epoch*math.pi/total_epochs))/2)*0.8+0.2
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
+
+    # scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99)
 
     start_epoch = 0
     scheduler.last_epoch = start_epoch - 1
+    
     scaler = amp.GradScaler(enabled=True)
 
     for epoch in range(start_epoch, total_epochs):
@@ -70,19 +68,16 @@ def train(params, device):
 
             imgs = imgs.to(device, non_blocking=True).float() / 255.0
 
-            # Warm Up
             if iteration <= num_warm:
                 xi = [0, num_warm]
-                accumulate = max(1, np.interp(iteration, xi, [1, nbs / batch_size]).round())
-                for j, x in enumerate(optimizer.param_groups):
-                    x['lr'] = np.interp(
-                        iteration, xi, [0.1 if j == 2 else 0.0, x['initial_lr'] * lf(epoch)])
+                accumulate = max(1, np.interp(iteration, xi, [1, nbs/batch_size]).round())
+                for x in optimizer.param_groups:
+                    x['lr'] = np.interp(iteration, xi, [0.0, x['initial_lr'] * lf(epoch)])
 
             # Autocast
             with amp.autocast(enabled=True):
                 pred = model(imgs)
-                loss, loss_items = compute_loss(pred, targets.to(
-                    device), params["io_params"]["anchors"])
+                loss, loss_items = compute_loss(pred, targets.to(device), params["io_params"])
 
             scaler.scale(loss).backward()
 
@@ -105,6 +100,12 @@ def train(params, device):
 if __name__ == '__main__':
 
     device = torch.device('cuda:0')
+    
+    # cudnn benchmark
+    import torch.backends.cudnn as cudnn
+    cudnn.deterministic = False
+    cudnn.benchmark = True
+
     logging.basicConfig(format="%(message)s", level=logging.INFO)
 
     params = {
@@ -115,6 +116,7 @@ if __name__ == '__main__':
             "num_cls":  1,
             "anchors":  [[[30, 61],  [48, 65],  [52, 132]],
                          [[52, 114], [114, 199], [202, 400]]],
+            "strides": [16, 32],
         },
 
         "augment_params": {
@@ -134,13 +136,11 @@ if __name__ == '__main__':
 
         "train_params": {
             "total_epochs": 10,
-            "batch_size": 32,
+            "batch_size": 4,
             "lr0": 0.001,         # initial learning rate (SGD=1E-2, Adam=1E-3)
             "momentum": 0.937,   # SGD momentum/Adam beta1
             "weight_decay": 0.0005,
         },
-
-        # "network_params" : {}
     }
 
     train(params, device)

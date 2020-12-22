@@ -137,8 +137,11 @@ def smooth_BCE(eps=0.1):
 
 
 
-def compute_loss(pred, targets, anchors):
+def compute_loss(pred, targets, params):
 
+    anchors = params["anchors"]
+    strides = params["strides"]
+    assert (len(anchors)==len(strides))
     num_anchor = len(anchors[0])
 
     device = targets.device
@@ -149,7 +152,7 @@ def compute_loss(pred, targets, anchors):
 
     cp, cn = smooth_BCE(eps=0.0)
     
-    tcls, tbox, indices, anchors = build_targets(pred, targets, anchors)
+    tcls, tbox, indices, anchors = build_targets(pred, targets, anchors, strides)
 
     n_scale = len(pred)
     balance = [4.0, 1.0] if n_scale == 2 else [4.0, 1.0, 0.4]
@@ -197,7 +200,7 @@ def compute_loss(pred, targets, anchors):
 
 
 
-def build_targets(pred, targets, anchors):
+def build_targets(pred, targets, anchors, strides):
     '''
         pred     --->  [scale_1, scale2 ....]
         targets  --->  N*6 (image,class,x,y,w,h)
@@ -211,11 +214,10 @@ def build_targets(pred, targets, anchors):
     targets = torch.cat((targets.repeat(num_anchor, 1, 1), ai[:, :, None]), 2)
     # targets.shape --> 3*N*7, 3是每个尺度的anchor个数(将gt复制3份)
 
-    g = 0.5
-    offset = torch.tensor([[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1]], device=targets.device).float() * g
+    offset = 0.5*torch.tensor([[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1]], device=targets.device).float()
 
     gain = torch.ones(7, device=targets.device)
-    for s, stride in enumerate([16, 32]): #range(len(pred)): # 16, 32两个scale 
+    for s, stride in enumerate(strides):
         
         gain[2:6] = torch.tensor(pred[s].shape)[[3, 2, 3, 2]] # (80,80,80,80)或 40或 20
         t = targets * gain  # 3*N*7
@@ -224,14 +226,14 @@ def build_targets(pred, targets, anchors):
 
         if num_target:
             r = t[:, :, 4:6] / anchor_s[:, None]  # wh ratio
-            j = torch.max(r, 1. / r).max(2)[0] <  4.0 # model.hyp['anchor_t']
+            j = torch.max(r, 1./r).max(2)[0] < 4.0
             t = t[j]
 
             # Offsets
             gxy = t[:, 2:4]  # grid xy
             gxi = gain[[2, 3]] - gxy
-            j, k = ((gxy % 1. < g) & (gxy > 1.)).T
-            l, m = ((gxi % 1. < g) & (gxi > 1.)).T
+            j, k = ((gxy % 1. < 0.5) & (gxy > 1.)).T
+            l, m = ((gxi % 1. < 0.5) & (gxi > 1.)).T
             j = torch.stack((torch.ones_like(j), j, k, l, m))
             t = t.repeat((5, 1, 1))[j]
             offsets = (torch.zeros_like(gxy)[None] + offset[:, None])[j]
