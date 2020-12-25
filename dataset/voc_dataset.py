@@ -37,7 +37,7 @@ def get_hash(files):
 class SimpleDataset(Dataset):
     def __init__(self, path, img_size=640, augment=True, aug_params=None, rect=False, pad=0.0):
 
-        self.img_files = sorted(glob.glob(path+"/images/*.jpg"))
+        self.img_files = sorted(glob.glob(path+"/images/train/*.jpg"))
         self.label_files = [x.replace('images', 'labels').replace('jpg', 'txt') for x in self.img_files]
   
         self.img_size = img_size
@@ -71,7 +71,7 @@ class SimpleDataset(Dataset):
         if self.mosaic:
             img, labels = load_mosaic(self, index)
         else:
-            img, labels= load_rect(self, index, new_shape=(640, 960))
+            img, labels= load_rect(self, index, new_shape=(736, 1280))
 
         # for anno in labels:
         #     x1 = int(anno[1])

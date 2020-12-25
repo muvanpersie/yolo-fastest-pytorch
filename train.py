@@ -41,7 +41,7 @@ def train(params, device):
     batch_per_epoch = len(dataloader)
     num_warm = max(3*batch_per_epoch, 1e3)
 
-    nbs = 64  # nominal batch size
+    nbs = 48  # nominal batch size
     accumulate = max(round(nbs / batch_size), 1)
 
     train_params = params["train_params"]
@@ -111,11 +111,11 @@ if __name__ == '__main__':
     params = {
         "io_params": {
             "save_path": 'output',
-            "train_path": '/home/lance/data/DataSets/quanzhou/coco_style/cyclist',
+            "train_path": '/home/lance/data/DataSets/bdd/100k',
             "input_size": 640,
-            "num_cls":  1,
-            "anchors":  [[[30, 61],  [48, 65],  [52, 132]],
-                         [[52, 114], [114, 199], [202, 400]]],
+            "num_cls":  7,
+            "anchors":  [[[12, 18],  [37, 49],  [52,132]], 
+                         [[115, 73], [119,199], [242,238]]],
             "strides": [16, 32],
         },
 
@@ -136,7 +136,7 @@ if __name__ == '__main__':
 
         "train_params": {
             "total_epochs": 10,
-            "batch_size": 4,
+            "batch_size": 24,
             "lr0": 0.001,         # initial learning rate (SGD=1E-2, Adam=1E-3)
             "momentum": 0.937,   # SGD momentum/Adam beta1
             "weight_decay": 0.0005,

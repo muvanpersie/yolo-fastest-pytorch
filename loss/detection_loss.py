@@ -175,8 +175,10 @@ def compute_loss(pred, targets, params):
             pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[s]
             pbox = torch.cat((pxy, pwh), dim=1).to(device)  # predicted box
             iou = bbox_iou(pbox.T, tbox[s], x1y1x2y2=False, CIoU=True)
-                        
-            lbox += (1.0 - iou).mean()
+
+            # lbox += (1.0 - iou).mean()
+            l1_loss = nn.functional.smooth_l1_loss(pbox, tbox[s], reduction='mean')
+            lbox += l1_loss
 
             # Objectness
             iou_ratio = 0.5

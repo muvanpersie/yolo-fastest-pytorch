@@ -12,19 +12,35 @@ from models.yolo_fastest import YoloFastest
 from utils.general import non_max_suppression, scale_coords, plot_one_box
 
 
+def resize_img(img0, new_shape=(1088, 1920), color=(114, 114, 114)):
+    shape = img0.shape[:2]
+    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
+
+    unpad_shape = int(round(shape[1] * r)), int(round(shape[0] * r))
+    dw, dh = new_shape[1] - unpad_shape[0], new_shape[0] - unpad_shape[1]  # wh padding
+
+    img = cv2.resize(img0, unpad_shape, interpolation=cv2.INTER_LINEAR)
+
+    dw, dh = dw/2, dh/2
+    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+    img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
+
+    return img
+
+
 def detect(save_img=False):
-    img_root_path = '/home/lance/data/DataSets/quanzhou/coco_style/cyclist/images/'
-    weights = "output/epoch_6.pt" 
-    imgsz = 640
+    img_root_path = '/home/lance/data/DataSets/bdd/100k/images/train/'
+    weights = "output/epoch_1.pt" 
     
-    names = ["cyclist"]
+    names = ['car', 'truck', 'van', 'bus', 'pedestrian', 'cyclist', 'cone']
     colors = [[np.random.randint(0, 255) for _ in range(3)] for _ in range(len(names))]
 
     device = torch.device('cuda:0')
 
-    io_params =  { "num_cls" :  1,
-                   "anchors" :  [[[30, 61],  [48, 65],  [52,132]], 
-                                 [[52, 114], [114,199], [202,400]]],
+    io_params =  { "num_cls" :  7,
+                   "anchors" :  [[[12, 18],  [37, 49],  [52,132]], 
+                                 [[115, 73], [119,199], [242,238]]],
                    "strides" :  [16, 32] }
         
     # inference
@@ -34,16 +50,15 @@ def detect(save_img=False):
     model.load_state_dict(ckpt)
 
     # warm up
-    img = torch.zeros((1, 3, imgsz, imgsz), device=device)
+    img = torch.zeros((1, 3, 640, 640), device=device)
     _ = model(img)
     
     t0 = time.time()
-    img_lists = sorted(glob.glob(img_root_path + '*.jpg'))
+    img_lists = glob.glob(img_root_path + '*.jpg')
     for img_path in img_lists:
         
         img0 = cv2.imread(img_path)
-        # img = letterbox(img0, new_shape=(960, 640))[0]
-        img = cv2.resize(img0, (960,640), interpolation=cv2.INTER_LINEAR)
+        img = resize_img(img0, new_shape=(732, 1280))
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
         img = np.ascontiguousarray(img)
 
@@ -62,7 +77,8 @@ def detect(save_img=False):
             pred_s = pred_s[0] # 第一个batch
 
             (_, h, w) = pred_s.shape
-            pred_s = pred_s.view(1, 3, 6, h, w).permute(0, 1, 3, 4, 2).contiguous()
+            out_channel = io_params["num_cls"] + 5
+            pred_s = pred_s.view(1, 3, out_channel, h, w).permute(0, 1, 3, 4, 2).contiguous()
              
             yv, xv = torch.meshgrid([torch.arange(h), torch.arange(w)])
             grid = torch.stack((xv, yv), 2).view((1, 1, h, w, 2)).float().to(pred_s.device)
@@ -81,7 +97,7 @@ def detect(save_img=False):
         out = torch.cat(out, dim=1)
     
         # # output = [[x1,y1,x2,y2,conf,cls], [....]]   batch_size张图片的检测结果,放在list里面 
-        output = non_max_suppression(out, conf_thres=0.3)
+        output = non_max_suppression(out, conf_thres=0.5)
         
         # t2 = time_synchronized()
         # print(" Infer time: {:.3f}".format(t2-t1))
