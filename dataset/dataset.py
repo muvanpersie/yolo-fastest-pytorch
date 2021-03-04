@@ -71,17 +71,9 @@ class SimpleDataset(Dataset):
         if self.mosaic:
             img, labels = load_mosaic(self, index)
         else:
-            img, labels= load_rect(self, index, new_shape=(736, 1280))
+            img, labels = load_rect(self, index, new_shape=(736, 1280))
 
-        # for anno in labels:
-        #     x1 = int(anno[1])
-        #     x2 = int(anno[3])
-        #     y1 = int(anno[2])
-        #     y2 = int(anno[4])
-
-        #     cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 2)
-        # cv2.imshow("test", img)
-        # cv2.waitKey(0)
+        # 此时 labels为绝对大小
 
         if len(labels):
                 labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])
@@ -99,9 +91,9 @@ class SimpleDataset(Dataset):
             #                                  border=border)
 
             # colorspace
-            augment_hsv(img, hgain=self.aug_params['hsv_h'], sgain=self.aug_params['hsv_s'], 
-                        vgain=self.aug_params['hsv_v'])
+            augment_hsv(img)
 
+            # flip
             if random.random() < self.aug_params['fliplr']:
                 img = np.fliplr(img)
                 labels[:, 1] = 1 - labels[:, 1]
@@ -122,9 +114,6 @@ class SimpleDataset(Dataset):
         
         for (img_path, label_path) in pbar:
             annos = []
-            # image = Image.open(img_path)
-            # image.verify()
-            # shape = exif_size(image)
             img = cv2.imread(img_path)
             if img is not None:
                 shape = (img.shape[1], img.shape[0])
@@ -235,7 +224,7 @@ def load_mosaic(self, index):
     return img4, labels4
 
 
-def augment_hsv(img, hgain=0.5, sgain=0.5, vgain=0.5):
+def augment_hsv(img, hgain=0.015, sgain=0.7, vgain=0.4):
     r = np.random.uniform(-1, 1, 3) * [hgain, sgain, vgain] + 1  # random gains
     hue, sat, val = cv2.split(cv2.cvtColor(img, cv2.COLOR_BGR2HSV))
     dtype = img.dtype  # uint8

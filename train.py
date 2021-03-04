@@ -16,7 +16,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 from torch.utils.data import DataLoader
 
 from models.yolo_fastest import YoloFastest
-from dataset.voc_dataset import SimpleDataset
+from dataset.dataset import SimpleDataset
 from loss.detection_loss import compute_loss
 
 logger = logging.getLogger(__name__)
@@ -120,25 +120,24 @@ if __name__ == '__main__':
         },
 
         "augment_params": {
-            "hsv_h": 0.015,    # image HSV-Hue augmentation (fraction)
-            "hsv_s": 0.7,      # image HSV-Saturation augmentation (fraction)
-            "hsv_v": 0.4,      # image HSV-Value augmentation (fraction)
-            "degrees": 0.0,    # image rotation (+/- deg)
-            "translate": 0.0,  # image translation (+/- fraction)
-            "scale": 1.0,      # image scale (+/- gain)
-            "shear": 0.0,      # image shear (+/- deg)
-            # image perspective (+/- fraction), range 0-0.001
-            "perspective": 0.0,
-            "flipud": 0.0,     # image flip up-down (probability)
-            "fliplr": 0.5,     # image flip left-right (probability)
-            "mixup": 0.0,      # image mixup (probability)
+            "hsv_h": 0.015,     # image HSV-Hue augmentation (fraction)
+            "hsv_s": 0.7,       # image HSV-Saturation augmentation (fraction)
+            "hsv_v": 0.4,       # image HSV-Value augmentation (fraction)
+            "degrees": 0.0,     # image rotation (+/- deg)
+            "translate": 0.0,   # image translation (+/- fraction)
+            "scale": 1.0,       # image scale (+/- gain)
+            "shear": 0.0,       # image shear (+/- deg)
+            "perspective": 0.0, # image perspective (+/- fraction), range 0-0.001
+            "flipud": 0.0,      # image flip up-down (probability)
+            "fliplr": 0.5,      # image flip left-right (probability)
+            "mixup": 0.0,       # image mixup (probability)
         },
 
         "train_params": {
             "total_epochs": 10,
             "batch_size": 24,
             "lr0": 0.001,         # initial learning rate (SGD=1E-2, Adam=1E-3)
-            "momentum": 0.937,   # SGD momentum/Adam beta1
+            "momentum": 0.937,    # SGD momentum/Adam beta1
             "weight_decay": 0.0005,
         },
     }

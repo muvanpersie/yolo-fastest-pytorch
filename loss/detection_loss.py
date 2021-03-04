@@ -1,29 +1,13 @@
 # -*- coding=utf-8 -*-
 
-import glob
 import math
 import os
-import random
-import shutil
-import subprocess
-import time
-import logging
-from contextlib import contextmanager
-from copy import copy
-from pathlib import Path
-import platform
-
 import cv2
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
-import torchvision
-import yaml
-from scipy.cluster.vq import kmeans
-from scipy.signal import butter, filtfilt
-from tqdm import tqdm
 
 
 def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False):
