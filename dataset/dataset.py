@@ -37,7 +37,7 @@ def get_hash(files):
 class SimpleDataset(Dataset):
     def __init__(self, path, img_size=640, augment=True, aug_params=None, rect=False, pad=0.0):
 
-        self.img_files = sorted(glob.glob(path+"/images/train/*.jpg"))
+        self.img_files = sorted(glob.glob(path+"/images/train2014/*.jpg"))
         self.label_files = [x.replace('images', 'labels').replace('jpg', 'txt') for x in self.img_files]
   
         self.img_size = img_size
@@ -117,10 +117,13 @@ class SimpleDataset(Dataset):
             img = cv2.imread(img_path)
             if img is not None:
                 shape = (img.shape[1], img.shape[0])
-
-            with open(label_path, 'r') as f:
-                annos = np.array([x.split() for x in f.read().splitlines()], dtype=np.float32)
-            if len(annos) == 0:
+            
+            if os.path.exists(label_path):
+                with open(label_path, 'r') as f:
+                    annos = np.array([x.split() for x in f.read().splitlines()], dtype=np.float32)
+                if len(annos) == 0:
+                    annos = np.zeros((0, 5), dtype=np.float32)
+            else:
                 annos = np.zeros((0, 5), dtype=np.float32)
             
             x[img_path] = [annos, shape]

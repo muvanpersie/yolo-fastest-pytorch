@@ -81,6 +81,11 @@ def train(params, device):
 
             scaler.scale(loss).backward()
 
+            # log.info(
+            #     'Batch: {}-{}, '.format(epoch, batch_id) +
+            #     'loss = {:.3f} [{}], '.format(loss.item(), detailed_loss_info) +
+            #     'avg_loss = {:.3f}.'.format(np.mean(loss_hist)))
+
             logger.info("Total loss: {:.5f}\n Regression loss: {:.5f}, Objectness loss: {:.5f}, Classfication loss: {:.5f}".format(
                 loss.item(), loss_items[0].item(), loss_items[1].item(), loss_items[2].item()))
 
@@ -111,9 +116,9 @@ if __name__ == '__main__':
     params = {
         "io_params": {
             "save_path": 'output',
-            "train_path": '/home/lance/data/DataSets/bdd/100k',
+            "train_path": '/home/lance/data/DataSets/coco/2014',
             "input_size": 640,
-            "num_cls":  7,
+            "num_cls":  80,
             "anchors":  [[[12, 18],  [37, 49],  [52,132]], 
                          [[115, 73], [119,199], [242,238]]],
             "strides": [16, 32],

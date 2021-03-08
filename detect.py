@@ -11,6 +11,18 @@ import numpy as np
 from models.yolo_fastest import YoloFastest
 from utils.general import non_max_suppression, scale_coords, plot_one_box
 
+'''
+names: [ 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
+         'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
+         'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
+         'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard',
+         'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple',
+         'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch',
+         'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone',
+         'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear',
+         'hair drier', 'toothbrush' ]
+'''
+
 
 def resize_img(img0, new_shape=(1088, 1920), color=(114, 114, 114)):
     shape = img0.shape[:2]
@@ -29,16 +41,14 @@ def resize_img(img0, new_shape=(1088, 1920), color=(114, 114, 114)):
     return img
 
 
-def detect(save_img=False):
-    img_root_path = '/home/lance/data/DataSets/bdd/100k/images/train/'
-    weights = "output/epoch_1.pt" 
+def detect(args):
     
     names = ['car', 'truck', 'van', 'bus', 'pedestrian', 'cyclist', 'cone']
     colors = [[np.random.randint(0, 255) for _ in range(3)] for _ in range(len(names))]
 
     device = torch.device('cuda:0')
 
-    io_params =  { "num_cls" :  7,
+    io_params =  { "num_cls" :  80,
                    "anchors" :  [[[12, 18],  [37, 49],  [52,132]], 
                                  [[115, 73], [119,199], [242,238]]],
                    "strides" :  [16, 32] }
@@ -46,16 +56,16 @@ def detect(save_img=False):
     # inference
     model = YoloFastest(io_params).to(device)
     
-    ckpt = torch.load(weights)
+    ckpt = torch.load(args.weights)
     model.load_state_dict(ckpt)
 
     # warm up
     img = torch.zeros((1, 3, 640, 640), device=device)
     _ = model(img)
     
-    t0 = time.time()
-    img_lists = glob.glob(img_root_path + '*.jpg')
+    img_lists = glob.glob(args.root_dir + '*.jpg')
     for img_path in img_lists:
+        print (img_path)
         
         img0 = cv2.imread(img_path)
         img = resize_img(img0, new_shape=(732, 1280))
@@ -68,7 +78,6 @@ def detect(save_img=False):
         if img.ndimension() == 3:
             img = img.unsqueeze(0)
 
-        # t1 = time_synchronized()
         pred = model(img)
         
         out = []
@@ -89,8 +98,8 @@ def detect(save_img=False):
 
 
             pred_s = pred_s.sigmoid()
-            pred_s[..., 0:2] = (pred_s[..., 0:2] * 2. - 0.5 + grid) * strides[i] #x,y
-            pred_s[..., 2:4] = (pred_s[..., 2:4] * 2) ** 2 * anchors             #w,h
+            pred_s[..., 0:2] = (pred_s[..., 0:2] * 2. - 0.5 + grid) * strides[i] # x,y
+            pred_s[..., 2:4] = (pred_s[..., 2:4] * 2) ** 2 * anchors             # w,h
 
             out.append(pred_s.view(1, -1, 6))
 
@@ -118,6 +127,15 @@ def detect(save_img=False):
 
 
 if __name__ == '__main__':
-   
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--root_dir', type=str, default='/home/lance/data/DataSets/coco/2014/images/train2014/')
+    parser.add_argument('--weights',  type=str, default='output/epoch_0.pt', 
+                        help="weights to load")
+
+    # parser.add_argument('--det_thresh', type=float, default=0.25)
+    parser.add_argument('--save', default=False, action='store_true')    
+    args = parser.parse_args()
+
     with torch.no_grad():
-        detect()
+        detect(args)
