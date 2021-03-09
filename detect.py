@@ -12,6 +12,7 @@ from models.yolo_fastest import YoloFastest
 from utils.general import non_max_suppression, scale_coords, plot_one_box
 
 '''
+# coco 
 names: [ 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
          'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
          'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
@@ -42,25 +43,19 @@ def resize_img(img0, new_shape=(1088, 1920), color=(114, 114, 114)):
 
 
 def detect(args):
-    
-    names = ['car', 'truck', 'van', 'bus', 'pedestrian', 'cyclist', 'cone']
+    from config.config import params
+
+    io_params =  params["io_params"]
+    names = io_params["names"]
     colors = [[np.random.randint(0, 255) for _ in range(3)] for _ in range(len(names))]
 
-    device = torch.device('cuda:0')
-
-    io_params =  { "num_cls" :  80,
-                   "anchors" :  [[[12, 18],  [37, 49],  [52,132]], 
-                                 [[115, 73], [119,199], [242,238]]],
-                   "strides" :  [16, 32] }
-        
-    # inference
-    model = YoloFastest(io_params).to(device)
+    model = YoloFastest(io_params).cuda()
     
     ckpt = torch.load(args.weights)
     model.load_state_dict(ckpt)
 
     # warm up
-    img = torch.zeros((1, 3, 640, 640), device=device)
+    img = torch.zeros((1, 3, 640, 640)).cuda()
     _ = model(img)
     
     img_lists = glob.glob(args.root_dir + '*.jpg')
@@ -72,8 +67,7 @@ def detect(args):
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
         img = np.ascontiguousarray(img)
 
-        img = torch.from_numpy(img).to(device).float()
-        img /= 255.0
+        img = torch.from_numpy(img).cuda().float() / 255.0
         
         if img.ndimension() == 3:
             img = img.unsqueeze(0)
@@ -106,10 +100,7 @@ def detect(args):
         out = torch.cat(out, dim=1)
     
         # # output = [[x1,y1,x2,y2,conf,cls], [....]]   batch_size张图片的检测结果,放在list里面 
-        output = non_max_suppression(out, conf_thres=0.5)
-        
-        # t2 = time_synchronized()
-        # print(" Infer time: {:.3f}".format(t2-t1))
+        output = non_max_suppression(out, conf_thres=args.conf_thres)
 
         det = output[0]
         if det is not None and len(det):
@@ -122,18 +113,19 @@ def detect(args):
                 plot_one_box(xyxy, img0, label=label, color=colors[int(cls)], line_thickness=3)
 
         cv2.imshow("test", img0)
-        if cv2.waitKey(0) == ord('q'):  # q to quit
+        key = cv2.waitKey(0)
+        if key == 27:
             raise StopIteration
 
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--root_dir', type=str, default='/home/lance/data/DataSets/coco/2014/images/train2014/')
-    parser.add_argument('--weights',  type=str, default='output/epoch_0.pt', 
+    parser.add_argument('--root_dir', type=str, default='/home/lance/data/DataSets/quanzhou/coco_style/cyclist/images/')
+    parser.add_argument('--weights',  type=str, default='output/epoch_99.pt', 
                         help="weights to load")
 
-    # parser.add_argument('--det_thresh', type=float, default=0.25)
+    parser.add_argument('--conf_thres', type=float, default=0.4)
     parser.add_argument('--save', default=False, action='store_true')    
     args = parser.parse_args()
 

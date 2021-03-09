@@ -22,7 +22,7 @@ from loss.detection_loss import compute_loss
 logger = logging.getLogger(__name__)
 
 
-def train(params, device):
+def train(params):
 
     save_path = params["io_params"]["save_path"]
     train_path = params["io_params"]["train_path"]
@@ -30,11 +30,17 @@ def train(params, device):
     total_epochs = params["train_params"]["total_epochs"]
     batch_size = params["train_params"]["batch_size"]
 
-    model = YoloFastest(params["io_params"]).to(device)
+    n_gpu = torch.cuda.device_count()
+    batch_size *= n_gpu
+
+    model = YoloFastest(params["io_params"]).cuda()
     model.initialize_weights()
 
-    dataset = SimpleDataset(train_path, input_size, augment=True,
-                            aug_params=params["augment_params"], rect=True)
+    if n_gpu > 1:
+        model = torch.nn.DataParallel(model)
+
+    dataset = SimpleDataset(train_path, aug_mode=params["augment_params"]["aug_mode"],
+                            aug_params=params["augment_params"])
     dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=8, sampler=None,
                             pin_memory=True, collate_fn=SimpleDataset.collate_fn)
 
@@ -66,7 +72,7 @@ def train(params, device):
         for batch_id, (imgs, targets) in enumerate(dataloader):
             iteration = batch_id + batch_per_epoch * epoch  # 训练的总迭代次数
 
-            imgs = imgs.to(device, non_blocking=True).float() / 255.0
+            imgs = imgs.cuda().float() / 255.0
 
             if iteration <= num_warm:
                 xi = [0, num_warm]
@@ -77,17 +83,14 @@ def train(params, device):
             # Autocast
             with amp.autocast(enabled=True):
                 pred = model(imgs)
-                loss, loss_items = compute_loss(pred, targets.to(device), params["io_params"])
+                loss, loss_items = compute_loss(pred, targets.cuda(), params["io_params"])
 
             scaler.scale(loss).backward()
 
-            # log.info(
-            #     'Batch: {}-{}, '.format(epoch, batch_id) +
-            #     'loss = {:.3f} [{}], '.format(loss.item(), detailed_loss_info) +
-            #     'avg_loss = {:.3f}.'.format(np.mean(loss_hist)))
 
-            logger.info("Total loss: {:.5f}\n Regression loss: {:.5f}, Objectness loss: {:.5f}, Classfication loss: {:.5f}".format(
-                loss.item(), loss_items[0].item(), loss_items[1].item(), loss_items[2].item()))
+            logger.info("Batch: {}-{}, ".format(epoch, batch_id) + "Total loss: {:.4f}\n".format(loss.item()) + 
+                        " Reg loss: {:.4f}, Obj loss: {:.4f}, Cls loss: {:.4f}".format(
+                           loss_items[0].item(), loss_items[1].item(), loss_items[2].item()))
 
             # Optimize
             if iteration % accumulate == 0:
@@ -97,15 +100,13 @@ def train(params, device):
 
         scheduler.step()
 
-        torch.save(model.state_dict(), save_path+"/epoch_"+str(epoch)+'.pt')
+        torch.save(model.module.state_dict() if n_gpu>1 else model.state_dict(), save_path+"/epoch_"+str(epoch)+'.pt')
 
     torch.cuda.empty_cache()
 
 
 if __name__ == '__main__':
 
-    device = torch.device('cuda:0')
-    
     # cudnn benchmark
     import torch.backends.cudnn as cudnn
     cudnn.deterministic = False
@@ -113,38 +114,6 @@ if __name__ == '__main__':
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
 
-    params = {
-        "io_params": {
-            "save_path": 'output',
-            "train_path": '/home/lance/data/DataSets/coco/2014',
-            "input_size": 640,
-            "num_cls":  80,
-            "anchors":  [[[12, 18],  [37, 49],  [52,132]], 
-                         [[115, 73], [119,199], [242,238]]],
-            "strides": [16, 32],
-        },
+    from config.config import params
 
-        "augment_params": {
-            "hsv_h": 0.015,     # image HSV-Hue augmentation (fraction)
-            "hsv_s": 0.7,       # image HSV-Saturation augmentation (fraction)
-            "hsv_v": 0.4,       # image HSV-Value augmentation (fraction)
-            "degrees": 0.0,     # image rotation (+/- deg)
-            "translate": 0.0,   # image translation (+/- fraction)
-            "scale": 1.0,       # image scale (+/- gain)
-            "shear": 0.0,       # image shear (+/- deg)
-            "perspective": 0.0, # image perspective (+/- fraction), range 0-0.001
-            "flipud": 0.0,      # image flip up-down (probability)
-            "fliplr": 0.5,      # image flip left-right (probability)
-            "mixup": 0.0,       # image mixup (probability)
-        },
-
-        "train_params": {
-            "total_epochs": 10,
-            "batch_size": 24,
-            "lr0": 0.001,         # initial learning rate (SGD=1E-2, Adam=1E-3)
-            "momentum": 0.937,    # SGD momentum/Adam beta1
-            "weight_decay": 0.0005,
-        },
-    }
-
-    train(params, device)
+    train(params)

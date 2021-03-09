@@ -35,21 +35,14 @@ def get_hash(files):
 
 
 class SimpleDataset(Dataset):
-    def __init__(self, path, img_size=640, augment=True, aug_params=None, rect=False, pad=0.0):
+    def __init__(self, path, aug_mode=True, aug_params=None):
 
-        self.img_files = sorted(glob.glob(path+"/images/train2014/*.jpg"))
+        self.img_files = sorted(glob.glob(path+"/images/*.jpg"))
         self.label_files = [x.replace('images', 'labels').replace('jpg', 'txt') for x in self.img_files]
   
-        self.img_size = img_size
-        self.augment = augment
-        self.rect = rect
-
+        self.aug_mode = aug_mode
         self.aug_params = aug_params
 
-        self.mosaic = self.augment and not self.rect
-        self.mosaic_border = [-img_size // 2, -img_size // 2]
-        
-        
         #cache为字典 cache[img_path] = [annos, shape]
         cache_path = path + '/labels.cache'
         if os.path.isfile(cache_path):
@@ -68,35 +61,43 @@ class SimpleDataset(Dataset):
 
     def __getitem__(self, index):
 
-        if self.mosaic:
+        if self.aug_mode == "mosaic":
+            moisaic_size = self.aug_params["mosaic_size"]
+            self.mosaic_border = [-moisaic_size // 2, -moisaic_size // 2]
+
             img, labels = load_mosaic(self, index)
+
+        elif self.aug_mode == "rect":
+            new_shape = self.aug_params["new_shape"]
+
+            img, labels = load_rect(self, index, new_shape=new_shape)
         else:
-            img, labels = load_rect(self, index, new_shape=(736, 1280))
+            assert ("Unsupported data augment method!")
 
-        # 此时 labels为绝对大小
-
+        # 绝对大小 --> 相对大小
         if len(labels):
                 labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])
                 labels[:, [2, 4]] /= img.shape[0]
                 labels[:, [1, 3]] /= img.shape[1]
         
-        if self.augment:
-            # border = self.mosaic_border if self.mosaic else (0, 0)
-            # img, labels = random_perspective(img, labels,
-            #                                  degrees=self.aug_params['degrees'],
-            #                                  translate=self.aug_params['translate'],
-            #                                  scale=self.aug_params['scale'],
-            #                                  shear=self.aug_params['shear'],
-            #                                  perspective=self.aug_params['perspective'],
-            #                                  border=border)
 
-            # colorspace
-            augment_hsv(img)
+        #  perspective augment
+        border = self.mosaic_border if self.aug_mode=="mosaic" else (0, 0)
+        img, labels = random_perspective(img, labels,
+                                         degrees=self.aug_params['degrees'],
+                                         translate=self.aug_params['translate'],
+                                         scale=self.aug_params['scale'],
+                                         shear=self.aug_params['shear'],
+                                         perspective=self.aug_params['perspective'],
+                                         border=border)
 
-            # flip
-            if random.random() < self.aug_params['fliplr']:
-                img = np.fliplr(img)
-                labels[:, 1] = 1 - labels[:, 1]
+        # colorspace
+        augment_hsv(img)
+
+        # flip
+        if random.random() < self.aug_params['fliplr']:
+            img = np.fliplr(img)
+            labels[:, 1] = 1 - labels[:, 1]
 
         nL = len(labels)  # number of labels
         labels_out = torch.zeros((nL, 6))
@@ -107,6 +108,7 @@ class SimpleDataset(Dataset):
         img = np.ascontiguousarray(img)
 
         return torch.from_numpy(img), labels_out
+
 
     def cache_labels(self, path='labels.cache'):
         x = {}
@@ -175,16 +177,16 @@ def load_image(self, index):
     img = cv2.imread(path)  # BGR
     assert img is not None, 'Image Not Found ' + path
     h0, w0 = img.shape[:2]  # orig hw
-    r = self.img_size / max(h0, w0)  # resize image to img_size
+    r = self.aug_params["mosaic_size"] / max(h0, w0)  # resize image to img_size
 
     if r != 1:
-        interp = cv2.INTER_AREA if r < 1 and not self.augment else cv2.INTER_LINEAR
+        interp = cv2.INTER_LINEAR
         img = cv2.resize(img, (int(w0 * r), int(h0 * r)), interpolation=interp)
     return img, (h0, w0), img.shape[:2]  # img, hw_original, hw_resized
 
 def load_mosaic(self, index):
     labels4 = []
-    s = self.img_size
+    s = self.aug_params["mosaic_size"]
     yc, xc = [int(random.uniform(-x, 2 * s + x)) for x in self.mosaic_border]  # mosaic center x, y
     indices = [index] + [random.randint(0, len(self.annos) - 1) for _ in range(3)]  # 3 additional image indices
     for i, index in enumerate(indices):
