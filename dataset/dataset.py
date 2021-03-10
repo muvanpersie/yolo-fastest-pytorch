@@ -37,7 +37,7 @@ def get_hash(files):
 class SimpleDataset(Dataset):
     def __init__(self, path, aug_mode=True, aug_params=None):
 
-        self.img_files = sorted(glob.glob(path+"/images/*.jpg"))
+        self.img_files = sorted(glob.glob(path+"/images/train/*.jpg"))
         self.label_files = [x.replace('images', 'labels').replace('jpg', 'txt') for x in self.img_files]
   
         self.aug_mode = aug_mode
@@ -74,13 +74,6 @@ class SimpleDataset(Dataset):
         else:
             assert ("Unsupported data augment method!")
 
-        # 绝对大小 --> 相对大小
-        if len(labels):
-                labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])
-                labels[:, [2, 4]] /= img.shape[0]
-                labels[:, [1, 3]] /= img.shape[1]
-        
-
         #  perspective augment
         border = self.mosaic_border if self.aug_mode=="mosaic" else (0, 0)
         img, labels = random_perspective(img, labels,
@@ -97,11 +90,29 @@ class SimpleDataset(Dataset):
         # flip
         if random.random() < self.aug_params['fliplr']:
             img = np.fliplr(img)
-            labels[:, 1] = 1 - labels[:, 1]
+            labels[:, 1] = img.shape[1] - labels[:, 1]
+            labels[:, 3] = img.shape[1] - labels[:, 3]
+        
+
+        # # visulize debug
+        # if DEBUG:
+        #     for anno in labels:
+        #         x1 = int(anno[1])
+        #         x2 = int(anno[3])
+        #         y1 = int(anno[2])
+        #         y2 = int(anno[4])
+        #         cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 2)
+        #     cv2.imshow("test", img)
+        #     cv2.waitKey(0)
 
         nL = len(labels)  # number of labels
         labels_out = torch.zeros((nL, 6))
         if nL:
+            # 绝对大小 --> 相对大小
+            labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])
+            labels[:, [2, 4]] /= img.shape[0]
+            labels[:, [1, 3]] /= img.shape[1]
+
             labels_out[:, 1:] = torch.from_numpy(labels)
 
         img = img[:, :, ::-1].transpose(2, 0, 1)

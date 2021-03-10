@@ -1,6 +1,6 @@
 # Pytorch version yolo-fastest
 
-This repo is base on [Yolo-Fastest](https://github.com/dog-qiuqiu/Yolo-Fastest) and [yolov5](https://github.com/ultralytics/yolov5). It is now can be used for BDD100k and Mscoco dataset now.
+This repo is based on [Yolo-Fastest](https://github.com/dog-qiuqiu/Yolo-Fastest) and [yolov5](https://github.com/ultralytics/yolov5). It is now can be used for BDD100k and Mscoco dataset now.
 
 ## 1. Requirements
 - Ubunut 16+

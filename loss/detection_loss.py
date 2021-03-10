@@ -141,8 +141,9 @@ def compute_loss(pred, targets, params):
     n_scale = len(pred)
     balance = [4.0, 1.0] if n_scale == 2 else [4.0, 1.0, 0.4]
     
-    for s, pred_s in enumerate(pred):
-        
+    
+    for s, pred_s in enumerate(pred): # each scale
+
         shape = pred_s.shape
         num_out  = int(shape[1] / num_anchor)
         pred_s = pred_s.view(shape[0], num_anchor, num_out, shape[2], shape[3]).permute(0, 1, 3, 4, 2).contiguous()

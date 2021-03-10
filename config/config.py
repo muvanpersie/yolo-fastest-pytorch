@@ -1,3 +1,5 @@
+
+'''
 # for cyclist
 params = {
         "io_params": {
@@ -36,6 +38,9 @@ params = {
             "weight_decay": 0.0005,
         },
     }
+
+'''
+
 
 '''
 # for ms coco
@@ -87,12 +92,12 @@ params = {
 '''
 
 
-'''
+
 # for bdd100k
 params = {
         "io_params": {
             "save_path": 'output',
-            "train_path": '/home/lance/data/DataSets/quanzhou/coco_style/cyclist',
+            "train_path": '/home/lance/data/DataSets/bdd/100k',
             "input_size": 640,
             "num_cls":  7,
             "names": ['car', 'truck', 'van', 'bus', 'pedestrian', 'cyclist', 'cone'],
@@ -102,7 +107,7 @@ params = {
         },
 
         "augment_params": {
-            "aug_mode": "mosaic", # "mosaic" or "rect"
+            "aug_mode": "rect", # "mosaic" or "rect"
             "mosaic_size": 640,   # only valid for mosaic mode
             "new_shape": (736, 1280), # only vaild for rect mode
             "hsv_h": 0.015,     # image HSV-Hue augmentation (fraction)
@@ -120,10 +125,9 @@ params = {
 
         "train_params": {
             "total_epochs": 100,
-            "batch_size": 24,
+            "batch_size": 12,
             "lr0": 0.001,         # initial learning rate (SGD=1E-2, Adam=1E-3)
             "momentum": 0.937,    # SGD momentum/Adam beta1
             "weight_decay": 0.0005,
         },
     }
-'''
