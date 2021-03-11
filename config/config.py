@@ -125,7 +125,7 @@ params = {
 
         "train_params": {
             "total_epochs": 100,
-            "batch_size": 12,
+            "batch_size": 20,
             "lr0": 0.001,         # initial learning rate (SGD=1E-2, Adam=1E-3)
             "momentum": 0.937,    # SGD momentum/Adam beta1
             "weight_decay": 0.0005,

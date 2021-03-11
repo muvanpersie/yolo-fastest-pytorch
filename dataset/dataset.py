@@ -7,6 +7,7 @@ import random
 import time
 
 import cv2
+import copy
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -75,27 +76,29 @@ class SimpleDataset(Dataset):
             assert ("Unsupported data augment method!")
 
         #  perspective augment
-        border = self.mosaic_border if self.aug_mode=="mosaic" else (0, 0)
-        img, labels = random_perspective(img, labels,
-                                         degrees=self.aug_params['degrees'],
-                                         translate=self.aug_params['translate'],
-                                         scale=self.aug_params['scale'],
-                                         shear=self.aug_params['shear'],
-                                         perspective=self.aug_params['perspective'],
-                                         border=border)
+        # border = self.mosaic_border if self.aug_mode=="mosaic" else (0, 0)
+        # img, labels = random_perspective(img, labels,
+        #                                  degrees=self.aug_params['degrees'],
+        #                                  translate=self.aug_params['translate'],
+        #                                  scale=self.aug_params['scale'],
+        #                                  shear=self.aug_params['shear'],
+        #                                  perspective=self.aug_params['perspective'],
+        #                                  border=border)
 
         # colorspace
         augment_hsv(img)
 
         # flip
         if random.random() < self.aug_params['fliplr']:
-            img = np.fliplr(img)
-            labels[:, 1] = img.shape[1] - labels[:, 1]
-            labels[:, 3] = img.shape[1] - labels[:, 3]
-        
+            # img = np.fliplr(img)
+            img = cv2.flip(img, flipCode=1, dst=None)
 
+            labels_org = copy.deepcopy(labels)
+            labels[:, 1] = img.shape[1] - labels_org[:, 3]
+            labels[:, 3] = img.shape[1] - labels_org[:, 1]
+        
         # # visulize debug
-        # if DEBUG:
+        # if True:
         #     for anno in labels:
         #         x1 = int(anno[1])
         #         x2 = int(anno[3])
