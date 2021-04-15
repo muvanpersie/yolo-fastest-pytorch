@@ -3,7 +3,7 @@
 This repo is based on [Yolo-Fastest](https://github.com/dog-qiuqiu/Yolo-Fastest) and [yolov5](https://github.com/ultralytics/yolov5). It is now can be used for BDD100k and Mscoco dataset now.
 
 ## 1. Requirements
-- Ubunut 16+
+- Ubuntu 16+
 - CUDA 10.2+
 - pytorch 1.6.0+
 - opencv-python==4.2.0.34
@@ -65,7 +65,7 @@ python detect.py --root_dir YOUR_IMAGE_SET_PATH --weights output/epoch_xxx.pt --
 ```
 Press `Esc` to quit. 
 
-Here is an example result of BDD100k test task! It seems not bad!
+Here is an example result of BDD100k test task! It looks not bad!
 ![exmple](pics/example.jpg)
 
 ## 4. Evalution
