@@ -23,7 +23,7 @@ def export(args):
     ckpt = torch.load(args.weights)
     model.load_state_dict(ckpt)
 
-    dummy_input = torch.randn(1, 3, 256, 256).cuda()
+    dummy_input = torch.randn(1, 3, 736, 1280).cuda()
 
     out_path = "output/output.onnx"
     

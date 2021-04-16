@@ -11,7 +11,7 @@ import numpy as np
 from models.yolo_fastest import YoloFastest
 from utils.general import non_max_suppression, scale_coords
 
-def resize_img(img0, new_shape=(1088, 1920), color=(114, 114, 114)):
+def resize_img(img0, new_shape=(736, 1280), color=(114, 114, 114)):
     shape = img0.shape[:2]
     r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
 
