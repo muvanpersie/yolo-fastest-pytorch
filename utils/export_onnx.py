@@ -1,10 +1,7 @@
 # -*- coding=utf-8 -*-
 
 import argparse
-import sys
 
-import glob
-import cv2
 import torch
 import numpy as np
 
@@ -15,8 +12,6 @@ def export(args):
     from config.config import params
 
     io_params =  params["io_params"]
-    names = io_params["names"]
-    colors = [[np.random.randint(0, 255) for _ in range(3)] for _ in range(len(names))]
 
     model = YoloFastest(io_params).cuda()
     

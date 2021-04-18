@@ -112,11 +112,11 @@ def detect(args):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--root_dir', type=str, default='/home/lance/data/DataSets/bdd/100k/images/test/')
+    parser.add_argument('--root_dir', type=str, default='pics/')
     parser.add_argument('--weights',  type=str, default='output/epoch_99.pt', 
                         help="weights to load")
 
-    parser.add_argument('--conf_thres', type=float, default=0.4)
+    parser.add_argument('--conf_thres', type=float, default=0.6)
     parser.add_argument('--save', default=False, action='store_true')    
     args = parser.parse_args()
 

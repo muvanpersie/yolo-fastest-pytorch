@@ -66,7 +66,7 @@ python detect.py --root_dir YOUR_IMAGE_SET_PATH --weights output/epoch_xxx.pt --
 Press `Esc` to quit. 
 
 Here is an example result of BDD100k test task! It looks not bad!
-![exmple](pics/example.jpg)
+![exmple](pics/example_out.jpg)
 
 ## 4. Evalution
 

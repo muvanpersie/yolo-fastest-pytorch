@@ -3,7 +3,6 @@
 import argparse
 import sys
 
-import glob
 import cv2
 import torch
 import numpy as np
@@ -42,28 +41,29 @@ def detect(args):
 
     infer.build_enigne()
 
-    img_path = "/home/lance/data/DataSets/bdd/100k/images/val/b1c9c847-3bda4659.jpg"
+    img_path = "pics/example.jpg"
     img0 = cv2.imread(img_path)
     img = resize_img(img0, new_shape=(736, 1280))
     img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
     img = np.ascontiguousarray(img)
 
     img = img.astype(np.float32) / 255.0
+    # img = np.expand_dims(img, axis=0)
 
     trt_outputs = infer.infer(img)
 
-    output_shapes = [(1, 36, 23, 40), (1, 36, 46, 80)] # cls, centerness, reg
+
+    output_shapes = [(1, 36, 23, 40), (1, 36, 46, 80)] # 32x, 16x下采样
     trt_outputs = [output.reshape(shape) for output, shape in zip(trt_outputs, output_shapes)]
+    outputs = [trt_outputs[1], trt_outputs[0]] # 要保证和anchors一致性
 
     
     ####### process trt ouputs #######
     
     out = []
     strides = io_params["strides"]
-    for i, pred_s in enumerate(trt_outputs):
-        pred_s = pred_s[0] # 第一个batch
-
-        pred_s = torch.from_numpy(pred_s)
+    for i, pred_s in enumerate(outputs):
+        pred_s = torch.from_numpy(pred_s[0])
 
         (_, h, w) = pred_s.shape
         out_channel = io_params["num_cls"] + 5
@@ -103,6 +103,7 @@ def detect(args):
             txt =  '%s %.2f' % (names[cls], conf)
             cv2.putText(img0, txt, (x1, y1-2), fontFace=0, fontScale=0.6, color=(225, 255, 255), lineType=cv2.LINE_AA)
 
+    # cv2.imwrite("pics/example_out.jpg", img0)
     cv2.imshow("test", img0)
     key = cv2.waitKey(0)
     if key == 27:
@@ -116,7 +117,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_path',  type=str, default='output/output.trt', 
                         help="onnx or trt path")
 
-    parser.add_argument('--conf_thres', type=float, default=0.4)
+    parser.add_argument('--conf_thres', type=float, default=0.6)
     parser.add_argument('--save', default=False, action='store_true')    
     args = parser.parse_args()
 
